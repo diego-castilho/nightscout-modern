@@ -24,8 +24,10 @@ export function useAlarm(
   const { alarmEnabled, alarmThresholds } = useDashboardStore();
 
   // Persistent refs — do not cause re-renders
-  const lastAlarmRef = useRef<LastAlarm | null>(null);
-  const lastSgvRef   = useRef<number | null>(null);
+  const lastAlarmRef      = useRef<LastAlarm | null>(null);
+  // Tracks the last (sgv + thresholds) combination we evaluated,
+  // so that changing a threshold triggers re-evaluation of the current reading.
+  const lastProcessedKey  = useRef<string | null>(null);
 
   // Sync AudioContext with alarmEnabled state
   useEffect(() => {
@@ -41,12 +43,14 @@ export function useAlarm(
     if (!alarmEnabled || !latest) return;
 
     const sgv = latest.sgv;
-
-    // Skip if this is the exact same reading we already processed
-    if (sgv === lastSgvRef.current) return;
-    lastSgvRef.current = sgv;
-
     const { veryLow, low, high, veryHigh } = alarmThresholds;
+
+    // Skip if this exact (sgv + thresholds) combo was already processed.
+    // Including thresholds ensures a threshold change re-triggers evaluation
+    // even when the glucose reading hasn't changed yet.
+    const processedKey = `${sgv}|${veryLow}-${low}-${high}-${veryHigh}`;
+    if (processedKey === lastProcessedKey.current) return;
+    lastProcessedKey.current = processedKey;
 
     // Map SGV to zone and audio pattern
     let zone: string | null = null;
