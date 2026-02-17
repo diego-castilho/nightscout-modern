@@ -2,13 +2,10 @@
 // DashboardPage - Main glucose monitoring dashboard
 // ============================================================================
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useGlucoseData } from '../hooks/useGlucoseData';
-import { useAlarm } from '../hooks/useAlarm';
 import { useDashboardStore, getPeriodDates } from '../stores/dashboardStore';
 import { detectPatterns } from '../lib/api';
-import { globalAudioAlarm } from '../lib/audioAlarm';
-import { formatGlucose, unitLabel } from '../lib/glucose';
 import type { DetectedPattern } from '../lib/api';
 
 import { PeriodSelector } from '../components/layout/PeriodSelector';
@@ -20,42 +17,14 @@ import { TIRChart } from '../components/charts/TIRChart';
 import { DailyPatternChart } from '../components/charts/DailyPatternChart';
 
 import { Button } from '../components/ui/button';
-import { AlertCircle, X } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 
 export function DashboardPage() {
-  const { period, lastRefresh, triggerRefresh, unit, alarmEnabled } = useDashboardStore();
+  const { period, lastRefresh, triggerRefresh } = useDashboardStore();
   const { entries, latest, analytics, loading, error } = useGlucoseData();
   const [patterns, setPatterns] = useState<DetectedPattern[]>([]);
   const [patternsLoading, setPatternsLoading] = useState(true);
-
-  // Alarm banner state
-  const [alarmBanner, setAlarmBanner] = useState<{ zone: string; sgv: number } | null>(null);
-
-  // Auto-enable AudioContext on first user interaction (needed after page reload)
-  const audioListenerAttached = useRef(false);
-  useEffect(() => {
-    if (!alarmEnabled || globalAudioAlarm.isEnabled() || audioListenerAttached.current) return;
-    audioListenerAttached.current = true;
-
-    const enable = () => { globalAudioAlarm.enable(); };
-    document.addEventListener('click',      enable, { once: true });
-    document.addEventListener('keydown',    enable, { once: true });
-    document.addEventListener('touchstart', enable, { once: true });
-
-    return () => {
-      document.removeEventListener('click',      enable);
-      document.removeEventListener('keydown',    enable);
-      document.removeEventListener('touchstart', enable);
-    };
-  }, [alarmEnabled]);
-
-  const handleAlarm = useCallback((zone: string, sgv: number) => {
-    setAlarmBanner({ zone, sgv });
-    setTimeout(() => setAlarmBanner(null), 2 * 60 * 1000);
-  }, []);
-
-  useAlarm(latest, handleAlarm);
 
   // Fetch detected patterns separately (can be slow)
   useEffect(() => {
@@ -81,7 +50,6 @@ export function DashboardPage() {
   }, [period, lastRefresh]);
 
   const lastUpdated = latest ? new Date(latest.date) : null;
-  const sgvDisplay = (sgv: number) => `${formatGlucose(sgv, unit)} ${unitLabel(unit)}`;
 
   if (error && !loading && !latest) {
     return (
@@ -119,25 +87,6 @@ export function DashboardPage() {
             )}
           </p>
         </div>
-
-        {/* Alarm banner */}
-        {alarmBanner && (
-          <div className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm font-medium ${
-            alarmBanner.zone === 'urgentLow' || alarmBanner.zone === 'veryHigh'
-              ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300'
-              : 'border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-300'
-          }`}>
-            <span>
-              {alarmBanner.zone === 'urgentLow'  && `🚨 Glicose muito baixa! ${sgvDisplay(alarmBanner.sgv)}`}
-              {alarmBanner.zone === 'low'         && `⚠️ Glicose baixa! ${sgvDisplay(alarmBanner.sgv)}`}
-              {alarmBanner.zone === 'high'        && `⚠️ Glicose alta! ${sgvDisplay(alarmBanner.sgv)}`}
-              {alarmBanner.zone === 'veryHigh'    && `🚨 Glicose muito alta! ${sgvDisplay(alarmBanner.sgv)}`}
-            </span>
-            <button onClick={() => setAlarmBanner(null)} className="opacity-70 hover:opacity-100">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        )}
 
         {/* Current glucose - prominent */}
         <CurrentGlucoseCard latest={latest} loading={loading} />

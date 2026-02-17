@@ -6,7 +6,6 @@ import { Card, CardContent } from '../ui/card';
 import { getTrendArrow, getTrendDescription } from '../../lib/utils';
 import { formatGlucose as fmtGlucose, unitLabel } from '../../lib/glucose';
 import { useDashboardStore } from '../../stores/dashboardStore';
-import type { AlarmThresholds } from '../../stores/dashboardStore';
 import type { GlucoseEntry } from '../../lib/api';
 
 interface Props {
@@ -47,16 +46,16 @@ const LEVEL_CONFIG = {
   },
 };
 
-function classifyGlucose(sgv: number, t: AlarmThresholds): keyof typeof LEVEL_CONFIG {
-  if (sgv < t.veryLow) return 'veryLow';
-  if (sgv < t.low)     return 'low';
-  if (sgv <= t.high)   return 'normal';
-  if (sgv <= t.veryHigh) return 'high';
+function classifyGlucose(sgv: number): keyof typeof LEVEL_CONFIG {
+  if (sgv < 54)  return 'veryLow';
+  if (sgv < 70)  return 'low';
+  if (sgv <= 180) return 'normal';
+  if (sgv <= 250) return 'high';
   return 'veryHigh';
 }
 
 export function CurrentGlucoseCard({ latest, loading }: Props) {
-  const { unit, alarmThresholds } = useDashboardStore();
+  const { unit } = useDashboardStore();
   if (loading) {
     return (
       <Card>
@@ -82,7 +81,7 @@ export function CurrentGlucoseCard({ latest, loading }: Props) {
     );
   }
 
-  const level = classifyGlucose(latest.sgv, alarmThresholds);
+  const level = classifyGlucose(latest.sgv);
   const config = LEVEL_CONFIG[level];
   const trendArrow = getTrendArrow(latest.trend);
   const trendDesc = getTrendDescription(latest.trend);

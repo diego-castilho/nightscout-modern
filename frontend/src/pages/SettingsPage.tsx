@@ -2,24 +2,18 @@
 // SettingsPage - User-configurable settings
 // ============================================================================
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useDashboardStore } from '../stores/dashboardStore';
-import { fromDisplayUnit, toDisplayUnit, unitLabel } from '../lib/glucose';
+import { unitLabel } from '../lib/glucose';
 import type { GlucoseUnit } from '../lib/glucose';
-import type { AlarmThresholds } from '../stores/dashboardStore';
 import { saveSettings } from '../lib/api';
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Switch } from '../components/ui/switch';
 import { Select } from '../components/ui/select';
 import { Button } from '../components/ui/button';
-import { User, Bell, RefreshCw, RotateCcw } from 'lucide-react';
-
-const DEFAULT_THRESHOLDS_MGDL: AlarmThresholds = {
-  veryLow: 54, low: 70, high: 180, veryHigh: 250,
-};
+import { User, RefreshCw } from 'lucide-react';
 
 const REFRESH_OPTIONS = [
   { value: 1,  label: '1 minuto' },
@@ -35,31 +29,10 @@ export function SettingsPage() {
     unit, setUnit,
     patientName, setPatientName,
     refreshInterval, setRefreshInterval,
-    alarmEnabled, toggleAlarm,
-    alarmThresholds, setAlarmThresholds,
   } = useDashboardStore();
-
-  // Local threshold state (shown in selected unit)
-  const [localThresholds, setLocalThresholds] = useState({
-    veryLow:  toDisplayUnit(alarmThresholds.veryLow,  unit),
-    low:      toDisplayUnit(alarmThresholds.low,       unit),
-    high:     toDisplayUnit(alarmThresholds.high,      unit),
-    veryHigh: toDisplayUnit(alarmThresholds.veryHigh,  unit),
-  });
 
   const [localName, setLocalName] = useState(patientName);
   const [saved, setSaved] = useState(false);
-  const [errors, setErrors] = useState<string[]>([]);
-
-  // Recalculate displayed thresholds when unit changes
-  useEffect(() => {
-    setLocalThresholds({
-      veryLow:  toDisplayUnit(alarmThresholds.veryLow,  unit),
-      low:      toDisplayUnit(alarmThresholds.low,       unit),
-      high:     toDisplayUnit(alarmThresholds.high,      unit),
-      veryHigh: toDisplayUnit(alarmThresholds.veryHigh,  unit),
-    });
-  }, [unit, alarmThresholds]);
 
   function handleUnitChange(newUnit: GlucoseUnit) {
     setUnit(newUnit);
@@ -71,80 +44,16 @@ export function SettingsPage() {
     saveSettings({ refreshInterval: minutes }).catch(() => {});
   }
 
-  function handleThresholdChange(
-    field: keyof AlarmThresholds,
-    value: string
-  ) {
-    const num = parseFloat(value);
-    if (!isNaN(num)) {
-      setLocalThresholds((prev) => ({ ...prev, [field]: num }));
-    } else {
-      setLocalThresholds((prev) => ({ ...prev, [field]: value as unknown as number }));
-    }
-  }
-
-  function validate(): boolean {
-    const { veryLow, low, high, veryHigh } = localThresholds;
-    const errs: string[] = [];
-
-    if (isNaN(veryLow) || isNaN(low) || isNaN(high) || isNaN(veryHigh)) {
-      errs.push('Todos os valores de threshold devem ser numéricos.');
-    } else if (!(veryLow < low && low < high && high < veryHigh)) {
-      errs.push('Os thresholds devem respeitar: Muito Baixo < Baixo < Alto < Muito Alto.');
-    } else {
-      // Bounds check in mg/dL
-      const vlMg = fromDisplayUnit(veryLow, unit);
-      const vhMg = fromDisplayUnit(veryHigh, unit);
-      if (vlMg < 40 || vhMg > 400) {
-        errs.push('Valores fora do intervalo aceitável (40–400 mg/dL).');
-      }
-    }
-
-    setErrors(errs);
-    return errs.length === 0;
-  }
-
   function handleSave() {
-    if (!validate()) return;
-
     const newName = localName.trim();
-    const newThresholds: AlarmThresholds = {
-      veryLow:  fromDisplayUnit(localThresholds.veryLow,  unit),
-      low:      fromDisplayUnit(localThresholds.low,       unit),
-      high:     fromDisplayUnit(localThresholds.high,      unit),
-      veryHigh: fromDisplayUnit(localThresholds.veryHigh,  unit),
-    };
-
     setPatientName(newName);
-    setAlarmThresholds(newThresholds);
 
-    // Persist to server so settings are shared across all devices
-    saveSettings({
-      unit,
-      patientName:     newName,
-      refreshInterval,
-      alarmEnabled,
-      alarmThresholds: newThresholds,
-    }).catch(() => { /* Server unreachable — localStorage still updated */ });
+    saveSettings({ unit, patientName: newName, refreshInterval }).catch(() => {});
 
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
 
-  function handleReset() {
-    setAlarmThresholds(DEFAULT_THRESHOLDS_MGDL);
-    setLocalThresholds({
-      veryLow:  toDisplayUnit(DEFAULT_THRESHOLDS_MGDL.veryLow,  unit),
-      low:      toDisplayUnit(DEFAULT_THRESHOLDS_MGDL.low,       unit),
-      high:     toDisplayUnit(DEFAULT_THRESHOLDS_MGDL.high,      unit),
-      veryHigh: toDisplayUnit(DEFAULT_THRESHOLDS_MGDL.veryHigh,  unit),
-    });
-    setErrors([]);
-
-    saveSettings({ alarmThresholds: DEFAULT_THRESHOLDS_MGDL }).catch(() => {});
-  }
-
-  const step = unit === 'mmol' ? '0.1' : '1';
   const ul = unitLabel(unit);
 
   return (
@@ -200,6 +109,9 @@ export function SettingsPage() {
                   mmol/L
                 </Button>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Unidade atual: {ul}
+              </p>
             </div>
 
             {/* Refresh interval */}
@@ -224,173 +136,13 @@ export function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* ============ ALARMES ============ */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Bell className="h-4 w-4" />
-              Alarmes sonoros
-            </CardTitle>
-            <CardDescription>
-              Os limiares são comparados sempre em mg/dL internamente.
-              Aqui são exibidos em {ul}.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            {/* Enable/disable */}
-            <div className="flex items-center justify-between">
-              <div>
-                <Label htmlFor="alarmEnabled">Habilitar alarmes</Label>
-                <p className="text-xs text-muted-foreground">
-                  Requer clicar no ícone de sino no cabeçalho para ativar o áudio.
-                </p>
-              </div>
-              <Switch
-                id="alarmEnabled"
-                checked={alarmEnabled}
-                onCheckedChange={() => toggleAlarm()}
-              />
-            </div>
-
-            {/* Threshold inputs */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="veryLow" className="flex items-center gap-1.5">
-                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500" />
-                  Muito baixo ({ul})
-                </Label>
-                <Input
-                  id="veryLow"
-                  type="number"
-                  step={step}
-                  value={localThresholds.veryLow}
-                  onChange={(e) => handleThresholdChange('veryLow', e.target.value)}
-                  className="border-red-300 dark:border-red-800"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="low" className="flex items-center gap-1.5">
-                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-orange-500" />
-                  Baixo ({ul})
-                </Label>
-                <Input
-                  id="low"
-                  type="number"
-                  step={step}
-                  value={localThresholds.low}
-                  onChange={(e) => handleThresholdChange('low', e.target.value)}
-                  className="border-orange-300 dark:border-orange-800"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="high" className="flex items-center gap-1.5">
-                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-yellow-500" />
-                  Alto ({ul})
-                </Label>
-                <Input
-                  id="high"
-                  type="number"
-                  step={step}
-                  value={localThresholds.high}
-                  onChange={(e) => handleThresholdChange('high', e.target.value)}
-                  className="border-yellow-300 dark:border-yellow-800"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="veryHigh" className="flex items-center gap-1.5">
-                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500" />
-                  Muito alto ({ul})
-                </Label>
-                <Input
-                  id="veryHigh"
-                  type="number"
-                  step={step}
-                  value={localThresholds.veryHigh}
-                  onChange={(e) => handleThresholdChange('veryHigh', e.target.value)}
-                  className="border-red-300 dark:border-red-800"
-                />
-              </div>
-            </div>
-
-            {/* Threshold visual preview */}
-            <ThresholdPreview thresholds={localThresholds} unit={unit} />
-
-            {/* Errors */}
-            {errors.length > 0 && (
-              <div className="rounded-md border border-destructive bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {errors.map((e, i) => <p key={i}>{e}</p>)}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
         {/* ============ ACTIONS ============ */}
         <div className="flex items-center gap-3">
           <Button onClick={handleSave} className="flex-1 sm:flex-none sm:min-w-[120px]">
             {saved ? '✓ Salvo!' : 'Salvar'}
           </Button>
-          <Button
-            variant="outline"
-            onClick={handleReset}
-            className="flex items-center gap-1.5"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            Restaurar padrões
-          </Button>
         </div>
       </div>
     </main>
-  );
-}
-
-// ============================================================================
-// ThresholdPreview - Visual bar showing glucose zones
-// ============================================================================
-
-interface ThresholdPreviewProps {
-  thresholds: { veryLow: number; low: number; high: number; veryHigh: number };
-  unit: GlucoseUnit;
-}
-
-function ThresholdPreview({ thresholds, unit }: ThresholdPreviewProps) {
-  const ul = unitLabel(unit);
-  const { veryLow, low, high, veryHigh } = thresholds;
-  const max = unit === 'mmol' ? 22 : 400;
-  const min = 0;
-  const range = max - min;
-
-  const pct = (v: number) => Math.max(0, Math.min(100, ((v - min) / range) * 100));
-
-  const zones = [
-    { label: 'Muito Baixo', color: 'bg-red-500',    from: 0,       to: pct(veryLow) },
-    { label: 'Baixo',       color: 'bg-orange-500', from: pct(veryLow), to: pct(low) },
-    { label: 'Alvo',        color: 'bg-green-500',  from: pct(low),     to: pct(high) },
-    { label: 'Alto',        color: 'bg-yellow-400', from: pct(high),    to: pct(veryHigh) },
-    { label: 'Muito Alto',  color: 'bg-red-500',    from: pct(veryHigh), to: 100 },
-  ];
-
-  return (
-    <div className="space-y-2">
-      <p className="text-xs text-muted-foreground font-medium">Visualização das zonas</p>
-      <div className="relative h-6 w-full rounded-full overflow-hidden flex">
-        {zones.map((z, i) => (
-          <div
-            key={i}
-            className={`${z.color} h-full`}
-            style={{ width: `${z.to - z.from}%` }}
-            title={`${z.label}: ${i === 0 ? `< ${veryLow}` : i === zones.length - 1 ? `> ${veryHigh}` : ''} ${ul}`}
-          />
-        ))}
-      </div>
-      <div className="flex justify-between text-xs text-muted-foreground">
-        <span>{veryLow} {ul}</span>
-        <span>{low} {ul}</span>
-        <span>{high} {ul}</span>
-        <span>{veryHigh} {ul}</span>
-      </div>
-    </div>
   );
 }
