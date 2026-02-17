@@ -1,5 +1,5 @@
 // ============================================================================
-// TIRChart - Time in Range horizontal stacked bar
+// TIRChart - Time in Range: stacked bar + international targets table
 // ============================================================================
 
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -9,71 +9,97 @@ interface Props {
   tir: TimeInRange | null;
   loading: boolean;
   totalReadings?: number;
+  periodDays?: number; // used to compute time/day (default 1 = 24h)
 }
 
-interface Segment {
-  key: keyof TimeInRange;
-  percentKey: keyof TimeInRange;
+interface RangeRow {
   label: string;
-  shortLabel: string;
+  range: string;
+  targetLabel: string;
+  targetPct: number;
+  targetOp: '>=' | '<=';
   color: string;
   bgColor: string;
-  target: string;
-  targetMet: (pct: number) => boolean;
+  textColor: string;
+  percentKey: keyof TimeInRange;
+  countKey: keyof TimeInRange;
 }
 
-const SEGMENTS: Segment[] = [
+const RANGES: RangeRow[] = [
   {
-    key: 'veryLow',
-    percentKey: 'percentVeryLow',
-    label: 'Muito Baixo',
-    shortLabel: '<54',
+    label: 'Muito Alto',
+    range: '>250 mg/dL',
+    targetLabel: 'Menor que 5%',
+    targetPct: 5,
+    targetOp: '<=',
     color: '#dc2626',
     bgColor: 'bg-red-600',
-    target: '<1%',
-    targetMet: (pct) => pct < 1,
+    textColor: 'text-red-600 dark:text-red-400',
+    percentKey: 'percentVeryHigh',
+    countKey: 'veryHigh',
   },
   {
-    key: 'low',
-    percentKey: 'percentLow',
-    label: 'Baixo',
-    shortLabel: '54-70',
-    color: '#f97316',
-    bgColor: 'bg-orange-500',
-    target: '<4%',
-    targetMet: (pct) => pct < 4,
-  },
-  {
-    key: 'inRange',
-    percentKey: 'percentInRange',
-    label: 'No Alvo',
-    shortLabel: '70-180',
-    color: '#22c55e',
-    bgColor: 'bg-green-500',
-    target: '>70%',
-    targetMet: (pct) => pct >= 70,
-  },
-  {
-    key: 'high',
-    percentKey: 'percentHigh',
     label: 'Alto',
-    shortLabel: '180-250',
+    range: '180–250 mg/dL',
+    targetLabel: 'Menor que 25%',
+    targetPct: 25,
+    targetOp: '<=',
     color: '#f59e0b',
     bgColor: 'bg-amber-500',
-    target: '<25%',
-    targetMet: (pct) => pct < 25,
+    textColor: 'text-amber-500 dark:text-amber-400',
+    percentKey: 'percentHigh',
+    countKey: 'high',
   },
   {
-    key: 'veryHigh',
-    percentKey: 'percentVeryHigh',
-    label: 'Muito Alto',
-    shortLabel: '>250',
+    label: 'Alvo',
+    range: '70–180 mg/dL',
+    targetLabel: 'Maior que 70%',
+    targetPct: 70,
+    targetOp: '>=',
+    color: '#22c55e',
+    bgColor: 'bg-green-500',
+    textColor: 'text-green-600 dark:text-green-400',
+    percentKey: 'percentInRange',
+    countKey: 'inRange',
+  },
+  {
+    label: 'Baixo',
+    range: '54–70 mg/dL',
+    targetLabel: 'Menor que 4%',
+    targetPct: 4,
+    targetOp: '<=',
+    color: '#f97316',
+    bgColor: 'bg-orange-500',
+    textColor: 'text-orange-500 dark:text-orange-400',
+    percentKey: 'percentLow',
+    countKey: 'low',
+  },
+  {
+    label: 'Muito Baixo',
+    range: '<54 mg/dL',
+    targetLabel: 'Menor que 1%',
+    targetPct: 1,
+    targetOp: '<=',
     color: '#dc2626',
-    bgColor: 'bg-red-600',
-    target: '<5%',
-    targetMet: (pct) => pct < 5,
+    bgColor: 'bg-red-700',
+    textColor: 'text-red-700 dark:text-red-400',
+    percentKey: 'percentVeryLow',
+    countKey: 'veryLow',
   },
 ];
+
+function pctToTime(pct: number): string {
+  const totalMinutes = Math.round((pct / 100) * 24 * 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  if (hours === 0) return `${mins}min`;
+  if (mins === 0) return `${hours}h`;
+  return `${hours}h ${mins}min`;
+}
+
+function isTargetMet(pct: number, targetPct: number, op: '>=' | '<='): boolean {
+  return op === '>=' ? pct >= targetPct : pct <= targetPct;
+}
 
 export function TIRChart({ tir, loading, totalReadings }: Props) {
   if (loading) {
@@ -83,7 +109,7 @@ export function TIRChart({ tir, loading, totalReadings }: Props) {
           <CardTitle className="text-base">Tempo no Alvo (TIR)</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-32 bg-muted animate-pulse rounded-md" />
+          <div className="h-48 bg-muted animate-pulse rounded-md" />
         </CardContent>
       </Card>
     );
@@ -115,20 +141,21 @@ export function TIRChart({ tir, loading, totalReadings }: Props) {
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
-        {/* Stacked bar */}
-        <div className="flex h-10 rounded-lg overflow-hidden mb-3">
-          {SEGMENTS.map((seg) => {
+
+        {/* Stacked bar — order: veryHigh at left → veryLow at right */}
+        <div className="flex h-8 rounded-lg overflow-hidden mb-4">
+          {RANGES.map((seg) => {
             const pct = tir[seg.percentKey] as number;
             if (pct < 0.5) return null;
             return (
               <div
-                key={seg.key}
+                key={seg.label}
                 style={{ width: `${pct}%`, backgroundColor: seg.color }}
                 className="flex items-center justify-center transition-all"
                 title={`${seg.label}: ${pct.toFixed(1)}%`}
               >
-                {pct >= 5 && (
-                  <span className="text-white text-xs font-bold drop-shadow">
+                {pct >= 6 && (
+                  <span className="text-white text-[10px] font-bold drop-shadow">
                     {pct.toFixed(0)}%
                   </span>
                 )}
@@ -137,45 +164,58 @@ export function TIRChart({ tir, loading, totalReadings }: Props) {
           })}
         </div>
 
-        {/* Legend */}
-        <div className="grid grid-cols-5 gap-1">
-          {SEGMENTS.map((seg) => {
-            const pct = tir[seg.percentKey] as number;
-            const count = tir[seg.key] as number;
-            return (
-              <div key={seg.key} className="text-center">
-                <div
-                  className="w-3 h-3 rounded-sm mx-auto mb-1"
-                  style={{ backgroundColor: seg.color }}
-                />
-                <p className="text-[10px] text-muted-foreground leading-tight">{seg.shortLabel}</p>
-                <p className="text-xs font-bold" style={{ color: seg.color }}>
-                  {pct.toFixed(1)}%
-                </p>
-                <p className="text-[10px] text-muted-foreground">{count}</p>
-              </div>
-            );
-          })}
-        </div>
+        {/* International targets table */}
+        <div className="text-xs">
+          {/* Header */}
+          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 gap-y-0 pb-1 mb-1 border-b border-border font-medium text-muted-foreground">
+            <span>Faixa de Glicose</span>
+            <span className="text-right">Meta</span>
+            <span className="text-right">Real</span>
+            <span className="text-right">Tempo/dia</span>
+          </div>
 
-        {/* Targets */}
-        <div className="mt-3 pt-3 border-t border-border">
-          <p className="text-xs text-muted-foreground mb-2 font-medium">Metas internacionais:</p>
-          <div className="flex flex-wrap gap-2">
-            {SEGMENTS.map((seg) => {
-              const pct = tir[seg.percentKey] as number;
-              const met = seg.targetMet(pct);
+          {/* Rows */}
+          <div className="space-y-1">
+            {RANGES.map((seg) => {
+              const actualPct = tir[seg.percentKey] as number;
+              const met = isTargetMet(actualPct, seg.targetPct, seg.targetOp);
+              const actualTime = pctToTime(actualPct);
+              const targetTime = pctToTime(seg.targetPct);
+
               return (
-                <span
-                  key={seg.key}
-                  className={`text-[10px] px-2 py-0.5 rounded-full ${
-                    met
-                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                      : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                  }`}
+                <div
+                  key={seg.label}
+                  className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 items-center py-0.5"
                 >
-                  {met ? '✓' : '✗'} {seg.shortLabel}: {seg.target}
-                </span>
+                  {/* Range label + color dot */}
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <div
+                      className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
+                      style={{ backgroundColor: seg.color }}
+                    />
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{seg.range}</p>
+                    </div>
+                  </div>
+
+                  {/* Target */}
+                  <span className="text-muted-foreground text-right whitespace-nowrap">
+                    {seg.targetOp === '>=' ? '>' : '<'}{seg.targetPct}%
+                    <br />
+                    <span className="text-[10px]">({targetTime})</span>
+                  </span>
+
+                  {/* Actual % */}
+                  <span className={`font-bold text-right whitespace-nowrap ${met ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+                    {actualPct.toFixed(1)}%
+                  </span>
+
+                  {/* Actual time + met indicator */}
+                  <span className={`text-right whitespace-nowrap ${met ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+                    {actualTime}
+                    <span className="ml-1">{met ? '✓' : '✗'}</span>
+                  </span>
+                </div>
               );
             })}
           </div>

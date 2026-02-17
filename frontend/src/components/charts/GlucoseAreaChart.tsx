@@ -16,7 +16,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import type { GlucoseEntry } from '../../lib/api';
-import { useDashboardStore } from '../../stores/dashboardStore';
+import { useDashboardStore, type Period } from '../../stores/dashboardStore';
 import { getTrendArrow } from '../../lib/utils';
 
 interface Props {
@@ -26,10 +26,65 @@ interface Props {
 
 interface ChartPoint {
   time: number;
-  timeLabel: string;
   sgv: number;
   direction?: string;
   trend?: number;
+}
+
+// Returns explicit tick timestamps and format string based on period
+function getTickConfig(period: Period, start: number, end: number): {
+  ticks: number[];
+  formatStr: string;
+} {
+  let intervalMs: number;
+  let formatStr: string;
+
+  switch (period) {
+    case '1h':
+      intervalMs = 5 * 60 * 1000;           // every 5 min
+      formatStr = 'HH:mm';
+      break;
+    case '3h':
+      intervalMs = 15 * 60 * 1000;          // every 15 min
+      formatStr = 'HH:mm';
+      break;
+    case '6h':
+      intervalMs = 30 * 60 * 1000;          // every 30 min
+      formatStr = 'HH:mm';
+      break;
+    case '12h':
+      intervalMs = 60 * 60 * 1000;          // every 1h
+      formatStr = 'HH:mm';
+      break;
+    case '24h':
+      intervalMs = 2 * 60 * 60 * 1000;      // every 2h
+      formatStr = 'HH:mm';
+      break;
+    case '7d':
+      intervalMs = 24 * 60 * 60 * 1000;     // every day
+      formatStr = 'EEE dd/MM';
+      break;
+    case '14d':
+      intervalMs = 2 * 24 * 60 * 60 * 1000; // every 2 days
+      formatStr = 'dd/MM';
+      break;
+    case '30d':
+      intervalMs = 5 * 24 * 60 * 60 * 1000; // every 5 days
+      formatStr = 'dd/MM';
+      break;
+    default:
+      intervalMs = 60 * 60 * 1000;
+      formatStr = 'HH:mm';
+  }
+
+  // Generate ticks at exact interval boundaries
+  const ticks: number[] = [];
+  const firstTick = Math.ceil(start / intervalMs) * intervalMs;
+  for (let t = firstTick; t <= end; t += intervalMs) {
+    ticks.push(t);
+  }
+
+  return { ticks, formatStr };
 }
 
 function getGlucoseColor(sgv: number): string {
@@ -42,25 +97,23 @@ function getGlucoseColor(sgv: number): string {
 
 interface CustomTooltipProps {
   active?: boolean;
-  payload?: Array<{ value: number; payload: ChartPoint }>;
-  label?: string;
+  payload?: Array<{ payload: ChartPoint }>;
 }
 
 function CustomTooltip({ active, payload }: CustomTooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
 
   const point = payload[0].payload;
-  const sgv = point.sgv;
-  const color = getGlucoseColor(sgv);
+  const color = getGlucoseColor(point.sgv);
   const date = new Date(point.time);
 
   return (
     <div className="bg-background border border-border rounded-lg shadow-lg p-3 text-sm">
       <p className="text-muted-foreground text-xs mb-1">
-        {format(date, "dd/MM HH:mm", { locale: ptBR })}
+        {format(date, 'dd/MM HH:mm', { locale: ptBR })}
       </p>
       <p className="font-bold text-base" style={{ color }}>
-        {sgv} mg/dL {point.direction ? getTrendArrow(point.trend) : ''}
+        {point.sgv} mg/dL {getTrendArrow(point.trend)}
       </p>
     </div>
   );
@@ -97,24 +150,25 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
     );
   }
 
-  const isShortPeriod = ['3h', '6h', '12h', '24h'].includes(period);
-
   const data: ChartPoint[] = [...entries]
     .sort((a, b) => a.date - b.date)
     .map((e) => ({
       time: e.date,
-      timeLabel: format(new Date(e.date), isShortPeriod ? 'HH:mm' : 'dd/MM HH:mm', { locale: ptBR }),
       sgv: e.sgv,
       direction: e.direction,
       trend: e.trend,
     }));
 
-  // Y axis domain with some padding
+  const startTime = data[0].time;
+  const endTime = data[data.length - 1].time;
+
+  const { ticks, formatStr } = getTickConfig(period, startTime, endTime);
+
   const minVal = Math.max(0, Math.min(...data.map((d) => d.sgv)) - 20);
   const maxVal = Math.min(400, Math.max(...data.map((d) => d.sgv)) + 30);
 
-  // Determine X tick count based on data length
-  const tickCount = Math.min(8, data.length);
+  // Show individual dots only for very short periods (1h = ~12 points)
+  const showDots = data.length <= 20;
 
   return (
     <Card>
@@ -152,24 +206,25 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
             />
 
             <XAxis
-              dataKey="timeLabel"
+              dataKey="time"
+              type="number"
+              scale="time"
+              domain={['dataMin', 'dataMax']}
+              ticks={ticks}
+              tickFormatter={(ms: number) => format(new Date(ms), formatStr, { locale: ptBR })}
               tick={{ fontSize: 11, fill: 'currentColor' }}
               className="text-muted-foreground"
-              interval="preserveStartEnd"
-              tickCount={tickCount}
             />
 
             <YAxis
               domain={[minVal, maxVal]}
               tick={{ fontSize: 11, fill: 'currentColor' }}
               className="text-muted-foreground"
-              tickFormatter={(v) => `${v}`}
               width={40}
             />
 
             <Tooltip content={<CustomTooltip />} />
 
-            {/* Target range shading between 70 and 180 */}
             <ReferenceLine
               y={180}
               stroke="#f59e0b"
@@ -197,10 +252,10 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
               stroke="url(#glucoseGradient)"
               strokeWidth={2}
               fill="url(#glucoseAreaFill)"
-              dot={data.length < 50 ? { r: 2, fill: '#22c55e' } : false}
+              dot={showDots ? { r: 2.5, fill: '#22c55e', strokeWidth: 0 } : false}
               activeDot={{ r: 5, fill: '#22c55e', stroke: '#fff', strokeWidth: 2 }}
               isAnimationActive={true}
-              animationDuration={800}
+              animationDuration={600}
             />
           </ComposedChart>
         </ResponsiveContainer>

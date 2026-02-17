@@ -108,6 +108,10 @@ export interface DailyPattern {
   averageGlucose: number;
   count: number;
   stdDev: number;
+  p5: number;
+  p25: number;
+  p75: number;
+  p95: number;
 }
 
 export interface GlucoseAnalytics {

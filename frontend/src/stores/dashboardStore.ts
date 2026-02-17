@@ -5,7 +5,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export type Period = '3h' | '6h' | '12h' | '24h' | '7d' | '14d' | '30d';
+export type Period = '1h' | '3h' | '6h' | '12h' | '24h' | '7d' | '14d' | '30d';
 
 interface DashboardState {
   period: Period;
@@ -67,6 +67,9 @@ export function getPeriodDates(period: Period): { startDate: string; endDate: st
   const startDate = new Date();
 
   switch (period) {
+    case '1h':
+      startDate.setHours(startDate.getHours() - 1);
+      break;
     case '3h':
       startDate.setHours(startDate.getHours() - 3);
       break;

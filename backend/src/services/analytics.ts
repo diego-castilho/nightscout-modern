@@ -36,6 +36,16 @@ function calculateStdDev(values: number[]): number {
   return Math.sqrt(variance);
 }
 
+function calculatePercentile(sortedValues: number[], p: number): number {
+  if (sortedValues.length === 0) return 0;
+  if (sortedValues.length === 1) return sortedValues[0];
+  const index = (p / 100) * (sortedValues.length - 1);
+  const lower = Math.floor(index);
+  const upper = Math.ceil(index);
+  const weight = index - lower;
+  return Math.round(sortedValues[lower] * (1 - weight) + sortedValues[upper] * weight);
+}
+
 // ============================================================================
 // Glucose Statistics
 // ============================================================================
@@ -157,11 +167,16 @@ export function calculateDailyPatterns(entries: GlucoseEntry[]): DailyPattern[] 
 
   for (let hour = 0; hour < 24; hour++) {
     const values = hourlyData[hour] || [];
+    const sorted = [...values].sort((a, b) => a - b);
     patterns.push({
       hour,
       averageGlucose: values.length > 0 ? Math.round(calculateMean(values)) : 0,
       count: values.length,
       stdDev: values.length > 0 ? Math.round(calculateStdDev(values)) : 0,
+      p5: calculatePercentile(sorted, 5),
+      p25: calculatePercentile(sorted, 25),
+      p75: calculatePercentile(sorted, 75),
+      p95: calculatePercentile(sorted, 95),
     });
   }
 

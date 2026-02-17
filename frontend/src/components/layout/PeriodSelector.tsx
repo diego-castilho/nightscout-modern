@@ -6,6 +6,7 @@ import { useDashboardStore, type Period } from '../../stores/dashboardStore';
 import { Button } from '../ui/button';
 
 const PERIODS: { label: string; value: Period }[] = [
+  { label: '1h', value: '1h' },
   { label: '3h', value: '3h' },
   { label: '6h', value: '6h' },
   { label: '12h', value: '12h' },

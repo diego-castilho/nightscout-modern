@@ -123,6 +123,10 @@ export interface DailyPattern {
   averageGlucose: number;
   count: number;
   stdDev: number;
+  p5: number;   // 5th percentile
+  p25: number;  // 25th percentile
+  p75: number;  // 75th percentile
+  p95: number;  // 95th percentile
 }
 
 export interface GlucoseAnalytics {
