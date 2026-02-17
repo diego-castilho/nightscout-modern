@@ -20,10 +20,10 @@ export function Header({ lastUpdated }: HeaderProps) {
   const navigate = useNavigate();
   const isSettings = location.pathname === '/settings';
 
-  function handleAlarmToggle() {
+  async function handleAlarmToggle() {
     const next = !alarmEnabled;
     if (next) {
-      globalAudioAlarm.enable();
+      await globalAudioAlarm.enable();   // await ensures context is 'running'
       globalAudioAlarm.playConfirmation();
     } else {
       globalAudioAlarm.disable();

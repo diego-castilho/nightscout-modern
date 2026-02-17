@@ -24,13 +24,17 @@ const PATTERNS: Record<AlarmPattern, BeepConfig> = {
 export class AudioAlarm {
   private ctx: AudioContext | null = null;
 
-  /** Call this inside a user-gesture handler (e.g. button click). */
-  enable(): void {
-    if (this.ctx) return;
-    this.ctx = new AudioContext();
-    // Resume in case browser suspended it
+  /** Call this inside a user-gesture handler (e.g. button click).
+   *  Returns a promise so callers can await the context becoming 'running'
+   *  before scheduling sounds. */
+  async enable(): Promise<void> {
+    if (!this.ctx) {
+      this.ctx = new AudioContext();
+    }
+    // Browser may auto-suspend the context; always await resume to ensure
+    // it is 'running' before any sound is scheduled.
     if (this.ctx.state === 'suspended') {
-      this.ctx.resume();
+      await this.ctx.resume();
     }
   }
 

@@ -48,7 +48,6 @@ interface ChartPoint {
   count: number;
 }
 
-const Y_TICKS = [0, 54, 70, 180, 250, 350];
 const pad = (h: number) => `${String(h).padStart(2, '0')}:00`;
 
 interface CustomTooltipProps {
@@ -76,7 +75,8 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
 }
 
 export function DailyPatternChart() {
-  const { period, lastRefresh } = useDashboardStore();
+  const { period, lastRefresh, alarmThresholds } = useDashboardStore();
+  const yTicks = [0, alarmThresholds.veryLow, alarmThresholds.low, alarmThresholds.high, alarmThresholds.veryHigh, 350];
   const [patterns, setPatterns] = useState<DailyPattern[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -216,7 +216,7 @@ export function DailyPatternChart() {
             />
 
             <YAxis
-              ticks={Y_TICKS}
+              ticks={yTicks}
               domain={[0, 350]}
               tick={{ fontSize: 11, fill: 'currentColor' }}
               className="text-muted-foreground"
@@ -226,14 +226,14 @@ export function DailyPatternChart() {
             <Tooltip content={<CustomTooltip />} />
 
             {/* Target range lines */}
-            <ReferenceLine y={180} stroke="#22c55e" strokeWidth={1.5}>
-              <Label value="180" position="right" fontSize={10} fill="#22c55e" offset={4} />
+            <ReferenceLine y={alarmThresholds.high} stroke="#22c55e" strokeWidth={1.5}>
+              <Label value={String(alarmThresholds.high)} position="right" fontSize={10} fill="#22c55e" offset={4} />
             </ReferenceLine>
-            <ReferenceLine y={70} stroke="#22c55e" strokeWidth={1.5}>
-              <Label value="70" position="right" fontSize={10} fill="#22c55e" offset={4} />
+            <ReferenceLine y={alarmThresholds.low} stroke="#22c55e" strokeWidth={1.5}>
+              <Label value={String(alarmThresholds.low)} position="right" fontSize={10} fill="#22c55e" offset={4} />
             </ReferenceLine>
-            <ReferenceLine y={54} stroke="#f97316" strokeDasharray="3 3" strokeWidth={1}>
-              <Label value="54" position="right" fontSize={10} fill="#f97316" offset={4} />
+            <ReferenceLine y={alarmThresholds.veryLow} stroke="#f97316" strokeDasharray="3 3" strokeWidth={1}>
+              <Label value={String(alarmThresholds.veryLow)} position="right" fontSize={10} fill="#f97316" offset={4} />
             </ReferenceLine>
 
             {/* ── Stacked percentile bands (bottom → top) ─────────────── */}
