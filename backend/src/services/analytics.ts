@@ -98,7 +98,14 @@ export function calculateGlucoseStats(entries: GlucoseEntry[]): GlucoseStats {
 // Time in Range (TIR) Calculations
 // ============================================================================
 
-export function calculateTimeInRange(entries: GlucoseEntry[]): TimeInRange {
+export interface TIRThresholds {
+  veryLow?: number;  // mg/dL, default 54
+  low?: number;      // mg/dL, default 70
+  high?: number;     // mg/dL, default 180
+  veryHigh?: number; // mg/dL, default 250
+}
+
+export function calculateTimeInRange(entries: GlucoseEntry[], thresholds: TIRThresholds = {}): TimeInRange {
   if (entries.length === 0) {
     return {
       veryLow: 0,
@@ -114,10 +121,10 @@ export function calculateTimeInRange(entries: GlucoseEntry[]): TimeInRange {
     };
   }
 
-  const tVeryLow  = 54;
-  const tLow      = 70;
-  const tHigh     = 180;
-  const tVeryHigh = 250;
+  const tVeryLow  = thresholds.veryLow  ?? 54;
+  const tLow      = thresholds.low      ?? 70;
+  const tHigh     = thresholds.high     ?? 180;
+  const tVeryHigh = thresholds.veryHigh ?? 250;
 
   const total = entries.length;
   let veryLow = 0;
@@ -196,6 +203,7 @@ export function generateAnalytics(
   entries: GlucoseEntry[],
   startDate: Date,
   endDate: Date,
+  thresholds: TIRThresholds = {}
 ): GlucoseAnalytics {
   const daysDiff = Math.ceil(
     (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
@@ -208,7 +216,7 @@ export function generateAnalytics(
       days: daysDiff,
     },
     stats: calculateGlucoseStats(entries),
-    timeInRange: calculateTimeInRange(entries),
+    timeInRange: calculateTimeInRange(entries, thresholds),
     dailyPatterns: calculateDailyPatterns(entries),
     totalReadings: entries.length,
   };

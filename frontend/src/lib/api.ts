@@ -126,10 +126,19 @@ export interface GlucoseAnalytics {
   totalReadings: number;
 }
 
-export async function getAnalytics(startDate: string, endDate: string) {
-  const response = await api.get<{ success: boolean; data: GlucoseAnalytics }>('/analytics', {
-    params: { startDate, endDate },
-  });
+export async function getAnalytics(
+  startDate: string,
+  endDate: string,
+  thresholds?: { veryLow?: number; low?: number; high?: number; veryHigh?: number }
+) {
+  const params: Record<string, string | number> = { startDate, endDate };
+  if (thresholds) {
+    if (thresholds.veryLow  !== undefined) params.veryLow  = thresholds.veryLow;
+    if (thresholds.low      !== undefined) params.low      = thresholds.low;
+    if (thresholds.high     !== undefined) params.high     = thresholds.high;
+    if (thresholds.veryHigh !== undefined) params.veryHigh = thresholds.veryHigh;
+  }
+  const response = await api.get<{ success: boolean; data: GlucoseAnalytics }>('/analytics', { params });
   return response.data.data;
 }
 
@@ -186,6 +195,13 @@ export interface AppSettings {
   unit?: 'mgdl' | 'mmol';
   patientName?: string;
   refreshInterval?: number;
+  alarmEnabled?: boolean;
+  alarmThresholds?: {
+    veryLow: number;
+    low: number;
+    high: number;
+    veryHigh: number;
+  };
 }
 
 export async function getSettings(): Promise<AppSettings | null> {

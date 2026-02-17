@@ -19,7 +19,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import type { GlucoseEntry } from '../../lib/api';
-import { useDashboardStore, type Period } from '../../stores/dashboardStore';
+import { useDashboardStore, type Period, type AlarmThresholds } from '../../stores/dashboardStore';
 import { getTrendArrow } from '../../lib/utils';
 import { formatGlucose, unitLabel } from '../../lib/glucose';
 
@@ -34,8 +34,6 @@ interface ChartPoint {
   direction?: string;
   trend?: number;
 }
-
-const THRESHOLDS = { veryLow: 54, low: 70, high: 180, veryHigh: 250 };
 
 // TIR zone colors (matching TIRChart)
 const ZONE = {
@@ -55,7 +53,7 @@ function toOffset(val: number, minVal: number, maxVal: number): string {
 }
 
 // Determines the zone color at a given glucose value
-function zoneColor(val: number, t: typeof THRESHOLDS): string {
+function zoneColor(val: number, t: AlarmThresholds): string {
   if (val > t.veryHigh) return ZONE.veryHigh;
   if (val > t.high)     return ZONE.high;
   if (val >= t.low)     return ZONE.inRange;
@@ -64,7 +62,7 @@ function zoneColor(val: number, t: typeof THRESHOLDS): string {
 }
 
 // Builds gradient stops with exact boundary positions for the stroke
-function buildStrokeStops(minVal: number, maxVal: number, t: typeof THRESHOLDS) {
+function buildStrokeStops(minVal: number, maxVal: number, t: AlarmThresholds) {
   const thresholds = [t.veryHigh, t.high, t.low, t.veryLow]; // descending
   const stops: { offset: string; color: string }[] = [];
 
@@ -112,7 +110,7 @@ interface CustomTooltipProps {
 
 interface CustomTooltipWithUnitProps extends CustomTooltipProps {
   unit: import('../../lib/glucose').GlucoseUnit;
-  thresholds: typeof THRESHOLDS;
+  thresholds: AlarmThresholds;
 }
 
 function CustomTooltip({ active, payload, unit, thresholds }: CustomTooltipWithUnitProps) {
@@ -132,7 +130,7 @@ function CustomTooltip({ active, payload, unit, thresholds }: CustomTooltipWithU
 }
 
 export function GlucoseAreaChart({ entries, loading }: Props) {
-  const { period, unit } = useDashboardStore();
+  const { period, unit, alarmThresholds } = useDashboardStore();
 
   if (loading) {
     return (
@@ -168,14 +166,14 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
   const { ticks, formatStr } = getTickConfig(period, data[0].time, data[data.length - 1].time);
   const showDots = data.length <= 20;
 
-  const strokeStops = buildStrokeStops(minVal, maxVal, THRESHOLDS);
+  const strokeStops = buildStrokeStops(minVal, maxVal, alarmThresholds);
 
   // Reference lines only if threshold is within the Y range
   const refLines: { y: number; color: string; label: string; dash: string }[] = [
-    { y: THRESHOLDS.veryHigh, color: ZONE.veryHigh, label: String(THRESHOLDS.veryHigh), dash: '3 4' },
-    { y: THRESHOLDS.high,     color: ZONE.high,     label: String(THRESHOLDS.high),     dash: '4 4' },
-    { y: THRESHOLDS.low,      color: ZONE.low,      label: String(THRESHOLDS.low),       dash: '4 4' },
-    { y: THRESHOLDS.veryLow,  color: ZONE.veryLow,  label: String(THRESHOLDS.veryLow),  dash: '2 4' },
+    { y: alarmThresholds.veryHigh, color: ZONE.veryHigh, label: String(alarmThresholds.veryHigh), dash: '3 4' },
+    { y: alarmThresholds.high,     color: ZONE.high,     label: String(alarmThresholds.high),     dash: '4 4' },
+    { y: alarmThresholds.low,      color: ZONE.low,      label: String(alarmThresholds.low),       dash: '4 4' },
+    { y: alarmThresholds.veryLow,  color: ZONE.veryLow,  label: String(alarmThresholds.veryLow),  dash: '2 4' },
   ].filter((r) => r.y > minVal && r.y < maxVal);
 
   return (
@@ -231,7 +229,7 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
               tickFormatter={(v: number) => formatGlucose(v, unit)}
             />
 
-            <Tooltip content={<CustomTooltip unit={unit} thresholds={THRESHOLDS} />} />
+            <Tooltip content={<CustomTooltip unit={unit} thresholds={alarmThresholds} />} />
 
             {/* TIR zone reference lines */}
             {refLines.map((r) => (

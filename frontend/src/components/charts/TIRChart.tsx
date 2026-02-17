@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { toDisplayUnit, unitLabel } from '../../lib/glucose';
 import { useDashboardStore } from '../../stores/dashboardStore';
 import type { TimeInRange } from '../../lib/api';
+import type { AlarmThresholds } from '../../stores/dashboardStore';
 
 interface Props {
   tir: TimeInRange | null;
@@ -29,9 +30,7 @@ interface RangeRow {
   countKey: keyof TimeInRange;
 }
 
-const THRESHOLDS = { veryLow: 54, low: 70, high: 180, veryHigh: 250 };
-
-function buildRanges(t: typeof THRESHOLDS): RangeRow[] {
+function buildRanges(t: AlarmThresholds): RangeRow[] {
   return [
     {
       label: 'Muito Alto',
@@ -127,9 +126,9 @@ function rangeLabel(seg: RangeRow, ul: string): string {
 }
 
 export function TIRChart({ tir, loading, totalReadings }: Props) {
-  const { unit } = useDashboardStore();
+  const { unit, alarmThresholds } = useDashboardStore();
   const ul = unitLabel(unit);
-  const RANGES = buildRanges(THRESHOLDS);
+  const RANGES = buildRanges(alarmThresholds);
   if (loading) {
     return (
       <Card>

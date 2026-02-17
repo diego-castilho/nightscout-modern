@@ -3,10 +3,11 @@
 // ============================================================================
 
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Moon, Sun, RefreshCw, Activity, Settings, ArrowLeft } from 'lucide-react';
+import { Moon, Sun, RefreshCw, Activity, Bell, BellOff, Settings, ArrowLeft } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useTheme } from '../../hooks/useTheme';
 import { useDashboardStore } from '../../stores/dashboardStore';
+import { globalAudioAlarm } from '../../lib/audioAlarm';
 
 interface HeaderProps {
   lastUpdated?: Date | null;
@@ -14,10 +15,21 @@ interface HeaderProps {
 
 export function Header({ lastUpdated }: HeaderProps) {
   const { darkMode, toggleDarkMode } = useTheme();
-  const { triggerRefresh, patientName } = useDashboardStore();
+  const { triggerRefresh, alarmEnabled, toggleAlarm, patientName } = useDashboardStore();
   const location = useLocation();
   const navigate = useNavigate();
   const isSettings = location.pathname === '/settings';
+
+  async function handleAlarmToggle() {
+    const next = !alarmEnabled;
+    if (next) {
+      await globalAudioAlarm.enable();   // await ensures context is 'running'
+      globalAudioAlarm.playConfirmation();
+    } else {
+      globalAudioAlarm.disable();
+    }
+    toggleAlarm();
+  }
 
   const formatLastUpdated = (date: Date | null | undefined) => {
     if (!date) return '';
@@ -56,14 +68,26 @@ export function Header({ lastUpdated }: HeaderProps) {
           )}
 
           {!isSettings && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => triggerRefresh()}
-              title="Atualizar dados"
-            >
-              <RefreshCw className="h-4 w-4" />
-            </Button>
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => triggerRefresh()}
+                title="Atualizar dados"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleAlarmToggle}
+                title={alarmEnabled ? 'Desativar alarme sonoro' : 'Ativar alarme sonoro'}
+                className={alarmEnabled ? 'text-green-500 dark:text-green-400' : ''}
+              >
+                {alarmEnabled ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+              </Button>
+            </>
           )}
 
           <Button
