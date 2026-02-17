@@ -21,7 +21,7 @@
 
 services:
   nightscout-modern-backend:
-    ports: !reset []          # remove default port binding
+    ports: !reset []          # backend: no host port binding, internal only
     networks:
       nightscout_internal:   # keep internal DNS
       macvlan:
@@ -30,7 +30,11 @@ services:
       - ${MACVLAN_DNS:-10.0.0.1}
 
   nightscout-modern-frontend:
-    ports: !reset []          # remove default port binding (MacVLAN uses direct IP)
+    # Port binding is KEPT (from docker-compose.yml) even with MacVLAN.
+    # This allows tools running on the Docker host (e.g. cloudflared) to
+    # reach nginx via localhost:${FRONTEND_PORT} — since the host cannot
+    # directly reach MacVLAN container IPs (Linux MacVLAN limitation).
+    # MacVLAN IP (FRONTEND_IP) is used for direct LAN device access.
     networks:
       nightscout_internal:   # keep internal DNS for nginx → backend
       macvlan:
