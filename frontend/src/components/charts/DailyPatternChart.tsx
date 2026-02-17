@@ -3,6 +3,7 @@
 // Always shows the full 24h pattern regardless of selected period.
 // Bands: P5–P95 (outer, light) and P25–P75 (inner, darker)
 // Median line: 50th percentile (average)
+// When period ≤ 12h, hours outside the window are dimmed.
 // ============================================================================
 
 import {
@@ -14,11 +15,13 @@ import {
   CartesianGrid,
   Tooltip,
   ReferenceLine,
+  ReferenceArea,
   ResponsiveContainer,
   Label,
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import type { DailyPattern } from '../../lib/api';
+import { useDashboardStore, type Period } from '../../stores/dashboardStore';
 
 interface Props {
   patterns: DailyPattern[];
@@ -45,6 +48,41 @@ interface ChartPoint {
 // Fixed Y axis ticks matching the reference image
 const Y_TICKS = [0, 54, 70, 180, 250, 350];
 
+// Period → number of hours in the selection window
+const PERIOD_HOURS: Partial<Record<Period, number>> = {
+  '1h': 1, '3h': 3, '6h': 6, '12h': 12,
+};
+
+// Returns the x-axis ranges (hour strings) that should be dimmed.
+// Dimmed = hours OUTSIDE the selected period window.
+function getDimmedRanges(period: Period): Array<{ x1: string; x2: string }> {
+  const hours = PERIOD_HOURS[period];
+  if (hours === undefined) return []; // 24h, 7d, etc. — all visible
+
+  const pad = (h: number) => `${String(h).padStart(2, '0')}:00`;
+  const currentHour = new Date().getHours();
+  const startHour = (currentHour - hours + 24) % 24;
+
+  if (startHour < currentHour) {
+    // No midnight wrap — selected: [startHour..currentHour]
+    // Dimmed: [0..startHour-1] and [currentHour+1..23]
+    const ranges: Array<{ x1: string; x2: string }> = [];
+    if (startHour > 0)      ranges.push({ x1: pad(0),              x2: pad(startHour - 1) });
+    if (currentHour < 23)   ranges.push({ x1: pad(currentHour + 1), x2: pad(23) });
+    return ranges;
+  }
+
+  if (startHour > currentHour) {
+    // Midnight wrap — selected: [startHour..23] and [0..currentHour]
+    // Dimmed: [currentHour+1..startHour-1]
+    if (currentHour + 1 <= startHour - 1) {
+      return [{ x1: pad(currentHour + 1), x2: pad(startHour - 1) }];
+    }
+  }
+
+  return [];
+}
+
 interface CustomTooltipProps {
   active?: boolean;
   payload?: Array<{ payload: ChartPoint }>;
@@ -68,6 +106,8 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
 }
 
 export function DailyPatternChart({ patterns, loading }: Props) {
+  const { period } = useDashboardStore();
+
   if (loading) {
     return (
       <Card>
@@ -123,6 +163,9 @@ export function DailyPatternChart({ patterns, loading }: Props) {
   const xTicks = data
     .filter((d) => d.hourNum % 3 === 0)
     .map((d) => d.hour);
+
+  const dimmedRanges = getDimmedRanges(period);
+  const hasDimmed = dimmedRanges.length > 0;
 
   return (
     <Card>
@@ -244,6 +287,19 @@ export function DailyPatternChart({ patterns, loading }: Props) {
               animationDuration={600}
               legendType="none"
             />
+
+            {/* ── Dimmed overlay for hours outside selected period ──── */}
+            {dimmedRanges.map((r, i) => (
+              <ReferenceArea
+                key={i}
+                x1={r.x1}
+                x2={r.x2}
+                fill="rgb(100,116,139)"
+                fillOpacity={0.18}
+                strokeOpacity={0}
+                isFront={true}
+              />
+            ))}
           </ComposedChart>
         </ResponsiveContainer>
 
@@ -261,6 +317,12 @@ export function DailyPatternChart({ patterns, loading }: Props) {
             <div className="w-4 h-3 rounded-sm" style={{ background: 'rgba(34,197,94,0.15)' }} />
             <span className="text-[10px] text-muted-foreground">P5–P95</span>
           </div>
+          {hasDimmed && (
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-3 rounded-sm" style={{ background: 'rgba(100,116,139,0.18)' }} />
+              <span className="text-[10px] text-muted-foreground">Fora do período</span>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
