@@ -2,12 +2,12 @@
 // App - Main Dashboard
 // ============================================================================
 
-import { useEffect } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useGlucoseData } from './hooks/useGlucoseData';
 import { useTheme } from './hooks/useTheme';
+import { useAlarm } from './hooks/useAlarm';
 import { useDashboardStore, getPeriodDates } from './stores/dashboardStore';
 import { detectPatterns } from './lib/api';
-import { useState } from 'react';
 import type { DetectedPattern } from './lib/api';
 
 import { Header } from './components/layout/Header';
@@ -21,7 +21,7 @@ import { DailyPatternChart } from './components/charts/DailyPatternChart';
 
 import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card';
 import { Button } from './components/ui/button';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, X } from 'lucide-react';
 
 function App() {
   // Initialize theme from persisted state
@@ -31,6 +31,17 @@ function App() {
   const { entries, latest, analytics, loading, error } = useGlucoseData();
   const [patterns, setPatterns] = useState<DetectedPattern[]>([]);
   const [patternsLoading, setPatternsLoading] = useState(true);
+
+  // Alarm banner state
+  const [alarmBanner, setAlarmBanner] = useState<{ zone: string; sgv: number } | null>(null);
+
+  const handleAlarm = useCallback((zone: string, sgv: number) => {
+    setAlarmBanner({ zone, sgv });
+    // Auto-dismiss after 2 minutes
+    setTimeout(() => setAlarmBanner(null), 2 * 60 * 1000);
+  }, []);
+
+  useAlarm(latest, handleAlarm);
 
   // Fetch detected patterns separately (can be slow)
   useEffect(() => {
@@ -99,6 +110,25 @@ function App() {
               )}
             </p>
           </div>
+
+          {/* Alarm banner */}
+          {alarmBanner && (
+            <div className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm font-medium ${
+              alarmBanner.zone === 'urgentLow' || alarmBanner.zone === 'veryHigh'
+                ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300'
+                : 'border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-300'
+            }`}>
+              <span>
+                {alarmBanner.zone === 'urgentLow'  && `🚨 Glicose muito baixa! ${alarmBanner.sgv} mg/dL`}
+                {alarmBanner.zone === 'low'         && `⚠️ Glicose baixa! ${alarmBanner.sgv} mg/dL`}
+                {alarmBanner.zone === 'high'        && `⚠️ Glicose alta! ${alarmBanner.sgv} mg/dL`}
+                {alarmBanner.zone === 'veryHigh'    && `🚨 Glicose muito alta! ${alarmBanner.sgv} mg/dL`}
+              </span>
+              <button onClick={() => setAlarmBanner(null)} className="opacity-70 hover:opacity-100">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
 
           {/* Current glucose - prominent */}
           <CurrentGlucoseCard latest={latest} loading={loading} />

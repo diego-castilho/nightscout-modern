@@ -7,13 +7,28 @@ import { persist } from 'zustand/middleware';
 
 export type Period = '1h' | '3h' | '6h' | '12h' | '24h' | '7d' | '14d' | '30d';
 
+export interface AlarmThresholds {
+  veryLow:  number;  // default 54
+  low:      number;  // default 70
+  high:     number;  // default 180
+  veryHigh: number;  // default 250
+}
+
+const DEFAULT_THRESHOLDS: AlarmThresholds = {
+  veryLow: 54, low: 70, high: 180, veryHigh: 250,
+};
+
 interface DashboardState {
   period: Period;
   darkMode: boolean;
   lastRefresh: number;
+  alarmEnabled: boolean;
+  alarmThresholds: AlarmThresholds;
   setPeriod: (period: Period) => void;
   toggleDarkMode: () => void;
   triggerRefresh: () => void;
+  toggleAlarm: () => void;
+  setAlarmThresholds: (t: AlarmThresholds) => void;
 }
 
 export const useDashboardStore = create<DashboardState>()(
@@ -22,6 +37,8 @@ export const useDashboardStore = create<DashboardState>()(
       period: '24h',
       darkMode: false,
       lastRefresh: Date.now(),
+      alarmEnabled: false,
+      alarmThresholds: DEFAULT_THRESHOLDS,
 
       setPeriod: (period) => set({ period }),
 
@@ -37,12 +54,18 @@ export const useDashboardStore = create<DashboardState>()(
         }),
 
       triggerRefresh: () => set({ lastRefresh: Date.now() }),
+
+      toggleAlarm: () => set((state) => ({ alarmEnabled: !state.alarmEnabled })),
+
+      setAlarmThresholds: (t) => set({ alarmThresholds: t }),
     }),
     {
       name: 'nightscout-dashboard',
       partialize: (state: DashboardState) => ({
-        darkMode: state.darkMode,
-        period: state.period,
+        darkMode:        state.darkMode,
+        period:          state.period,
+        alarmEnabled:    state.alarmEnabled,
+        alarmThresholds: state.alarmThresholds,
       }),
     }
   )
