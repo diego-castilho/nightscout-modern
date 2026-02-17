@@ -1,5 +1,8 @@
 // ============================================================================
 // GlucoseAreaChart - Interactive glucose readings over time
+// Colors follow TIR zones: veryHigh=red, high=amber, inRange=green,
+// low=orange, veryLow=red. Gradient offsets are computed dynamically
+// from the actual Y-axis range so zone boundaries are pixel-accurate.
 // ============================================================================
 
 import {
@@ -31,68 +34,72 @@ interface ChartPoint {
   trend?: number;
 }
 
-// Returns explicit tick timestamps and format string based on period
-function getTickConfig(period: Period, start: number, end: number): {
-  ticks: number[];
-  formatStr: string;
-} {
-  let intervalMs: number;
-  let formatStr: string;
+// TIR zone colors (matching TIRChart)
+const ZONE = {
+  veryHigh: '#dc2626',  // >250 mg/dL
+  high:     '#f59e0b',  // 180–250 mg/dL
+  inRange:  '#22c55e',  // 70–180 mg/dL
+  low:      '#f97316',  // 54–70 mg/dL
+  veryLow:  '#dc2626',  // <54 mg/dL
+};
 
-  switch (period) {
-    case '1h':
-      intervalMs = 5 * 60 * 1000;           // every 5 min
-      formatStr = 'HH:mm';
-      break;
-    case '3h':
-      intervalMs = 15 * 60 * 1000;          // every 15 min
-      formatStr = 'HH:mm';
-      break;
-    case '6h':
-      intervalMs = 30 * 60 * 1000;          // every 30 min
-      formatStr = 'HH:mm';
-      break;
-    case '12h':
-      intervalMs = 60 * 60 * 1000;          // every 1h
-      formatStr = 'HH:mm';
-      break;
-    case '24h':
-      intervalMs = 2 * 60 * 60 * 1000;      // every 2h
-      formatStr = 'HH:mm';
-      break;
-    case '7d':
-      intervalMs = 24 * 60 * 60 * 1000;     // every day
-      formatStr = 'EEE dd/MM';
-      break;
-    case '14d':
-      intervalMs = 2 * 24 * 60 * 60 * 1000; // every 2 days
-      formatStr = 'dd/MM';
-      break;
-    case '30d':
-      intervalMs = 5 * 24 * 60 * 60 * 1000; // every 5 days
-      formatStr = 'dd/MM';
-      break;
-    default:
-      intervalMs = 60 * 60 * 1000;
-      formatStr = 'HH:mm';
-  }
-
-  // Generate ticks at exact interval boundaries
-  const ticks: number[] = [];
-  const firstTick = Math.ceil(start / intervalMs) * intervalMs;
-  for (let t = firstTick; t <= end; t += intervalMs) {
-    ticks.push(t);
-  }
-
-  return { ticks, formatStr };
+// Converts a glucose value to a gradient offset (0% = top, 100% = bottom)
+function toOffset(val: number, minVal: number, maxVal: number): string {
+  const range = maxVal - minVal;
+  if (range === 0) return '50%';
+  const pct = ((maxVal - val) / range) * 100;
+  return `${Math.max(0, Math.min(100, pct)).toFixed(2)}%`;
 }
 
-function getGlucoseColor(sgv: number): string {
-  if (sgv < 54) return '#dc2626';
-  if (sgv < 70) return '#f59e0b';
-  if (sgv <= 180) return '#22c55e';
-  if (sgv <= 250) return '#f59e0b';
-  return '#dc2626';
+// Determines the zone color at a given glucose value
+function zoneColor(val: number): string {
+  if (val > 250) return ZONE.veryHigh;
+  if (val > 180) return ZONE.high;
+  if (val >= 70) return ZONE.inRange;
+  if (val >= 54) return ZONE.low;
+  return ZONE.veryLow;
+}
+
+// Builds gradient stops with exact boundary positions for the stroke
+function buildStrokeStops(minVal: number, maxVal: number) {
+  const thresholds = [250, 180, 70, 54];
+  const stops: { offset: string; color: string }[] = [];
+
+  // Top boundary
+  stops.push({ offset: '0%', color: zoneColor(maxVal) });
+
+  // Add a stop pair at each threshold that falls within [minVal, maxVal]
+  for (const t of thresholds) {
+    if (t < maxVal && t > minVal) {
+      const off = toOffset(t, minVal, maxVal);
+      stops.push({ offset: off, color: zoneColor(t + 1) }); // just above threshold
+      stops.push({ offset: off, color: zoneColor(t - 1) }); // just below threshold
+    }
+  }
+
+  // Bottom boundary
+  stops.push({ offset: '100%', color: zoneColor(minVal) });
+
+  return stops;
+}
+
+// X-axis tick config per period
+function getTickConfig(period: Period, start: number, end: number) {
+  const configs: Record<Period, { intervalMs: number; formatStr: string }> = {
+    '1h':  { intervalMs: 5 * 60 * 1000,            formatStr: 'HH:mm' },
+    '3h':  { intervalMs: 15 * 60 * 1000,           formatStr: 'HH:mm' },
+    '6h':  { intervalMs: 30 * 60 * 1000,           formatStr: 'HH:mm' },
+    '12h': { intervalMs: 60 * 60 * 1000,           formatStr: 'HH:mm' },
+    '24h': { intervalMs: 2 * 60 * 60 * 1000,       formatStr: 'HH:mm' },
+    '7d':  { intervalMs: 24 * 60 * 60 * 1000,      formatStr: 'EEE dd/MM' },
+    '14d': { intervalMs: 2 * 24 * 60 * 60 * 1000,  formatStr: 'dd/MM' },
+    '30d': { intervalMs: 5 * 24 * 60 * 60 * 1000,  formatStr: 'dd/MM' },
+  };
+  const { intervalMs, formatStr } = configs[period] ?? configs['24h'];
+  const ticks: number[] = [];
+  const firstTick = Math.ceil(start / intervalMs) * intervalMs;
+  for (let t = firstTick; t <= end; t += intervalMs) ticks.push(t);
+  return { ticks, formatStr };
 }
 
 interface CustomTooltipProps {
@@ -101,16 +108,13 @@ interface CustomTooltipProps {
 }
 
 function CustomTooltip({ active, payload }: CustomTooltipProps) {
-  if (!active || !payload || payload.length === 0) return null;
-
+  if (!active || !payload?.length) return null;
   const point = payload[0].payload;
-  const color = getGlucoseColor(point.sgv);
-  const date = new Date(point.time);
-
+  const color = zoneColor(point.sgv);
   return (
     <div className="bg-background border border-border rounded-lg shadow-lg p-3 text-sm">
       <p className="text-muted-foreground text-xs mb-1">
-        {format(date, 'dd/MM HH:mm', { locale: ptBR })}
+        {format(new Date(point.time), 'dd/MM HH:mm', { locale: ptBR })}
       </p>
       <p className="font-bold text-base" style={{ color }}>
         {point.sgv} mg/dL {getTrendArrow(point.trend)}
@@ -125,12 +129,8 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
   if (loading) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Leituras de Glicose</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="h-64 bg-muted animate-pulse rounded-md" />
-        </CardContent>
+        <CardHeader><CardTitle className="text-base">Leituras de Glicose</CardTitle></CardHeader>
+        <CardContent><div className="h-64 bg-muted animate-pulse rounded-md" /></CardContent>
       </Card>
     );
   }
@@ -138,9 +138,7 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
   if (!entries || entries.length === 0) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Leituras de Glicose</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle className="text-base">Leituras de Glicose</CardTitle></CardHeader>
         <CardContent>
           <div className="h-64 flex items-center justify-center text-muted-foreground">
             Sem dados para o período selecionado
@@ -152,23 +150,25 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
 
   const data: ChartPoint[] = [...entries]
     .sort((a, b) => a.date - b.date)
-    .map((e) => ({
-      time: e.date,
-      sgv: e.sgv,
-      direction: e.direction,
-      trend: e.trend,
-    }));
+    .map((e) => ({ time: e.date, sgv: e.sgv, direction: e.direction, trend: e.trend }));
 
-  const startTime = data[0].time;
-  const endTime = data[data.length - 1].time;
+  const rawMin = Math.min(...data.map((d) => d.sgv));
+  const rawMax = Math.max(...data.map((d) => d.sgv));
+  const minVal = Math.max(0, rawMin - 20);
+  const maxVal = Math.min(400, rawMax + 30);
 
-  const { ticks, formatStr } = getTickConfig(period, startTime, endTime);
-
-  const minVal = Math.max(0, Math.min(...data.map((d) => d.sgv)) - 20);
-  const maxVal = Math.min(400, Math.max(...data.map((d) => d.sgv)) + 30);
-
-  // Show individual dots only for very short periods (1h = ~12 points)
+  const { ticks, formatStr } = getTickConfig(period, data[0].time, data[data.length - 1].time);
   const showDots = data.length <= 20;
+
+  const strokeStops = buildStrokeStops(minVal, maxVal);
+
+  // Reference lines only if threshold is within the Y range
+  const refLines: { y: number; color: string; label: string; dash: string }[] = [
+    { y: 250, color: ZONE.veryHigh, label: '250', dash: '3 4' },
+    { y: 180, color: ZONE.high,     label: '180', dash: '4 4' },
+    { y: 70,  color: ZONE.low,      label: '70',  dash: '4 4' },
+    { y: 54,  color: ZONE.veryLow,  label: '54',  dash: '2 4' },
+  ].filter((r) => r.y > minVal && r.y < maxVal);
 
   return (
     <Card>
@@ -179,17 +179,21 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
         <ResponsiveContainer width="100%" height={280}>
           <ComposedChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
             <defs>
-              <linearGradient id="glucoseGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#dc2626" stopOpacity={0.8} />
-                <stop offset="15%" stopColor="#f59e0b" stopOpacity={0.7} />
-                <stop offset="30%" stopColor="#22c55e" stopOpacity={0.6} />
-                <stop offset="70%" stopColor="#22c55e" stopOpacity={0.6} />
-                <stop offset="85%" stopColor="#f59e0b" stopOpacity={0.7} />
-                <stop offset="100%" stopColor="#dc2626" stopOpacity={0.8} />
+              {/* Stroke gradient — color changes at exact TIR zone boundaries */}
+              <linearGradient id="glStroke" x1="0" y1="0" x2="0" y2="1">
+                {strokeStops.map((s, i) => (
+                  <stop key={i} offset={s.offset} stopColor={s.color} stopOpacity={0.95} />
+                ))}
               </linearGradient>
-              <linearGradient id="glucoseAreaFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#22c55e" stopOpacity={0.15} />
-                <stop offset="95%" stopColor="#22c55e" stopOpacity={0.02} />
+
+              {/* Fill gradient — same zones, very light opacity */}
+              <linearGradient id="glFill" x1="0" y1="0" x2="0" y2="1">
+                {strokeStops.map((s, i) => {
+                  // Lighter at bottom for depth effect
+                  const frac = parseFloat(s.offset) / 100;
+                  const op = Math.max(0.02, 0.20 - frac * 0.16);
+                  return <stop key={i} offset={s.offset} stopColor={s.color} stopOpacity={op} />;
+                })}
               </linearGradient>
             </defs>
 
@@ -220,35 +224,31 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
 
             <Tooltip content={<CustomTooltip />} />
 
-            <ReferenceLine
-              y={180}
-              stroke="#f59e0b"
-              strokeDasharray="4 4"
-              strokeWidth={1.5}
-              label={{ value: '180', position: 'insideTopRight', fontSize: 10, fill: '#f59e0b' }}
-            />
-            <ReferenceLine
-              y={70}
-              stroke="#f59e0b"
-              strokeDasharray="4 4"
-              strokeWidth={1.5}
-              label={{ value: '70', position: 'insideBottomRight', fontSize: 10, fill: '#f59e0b' }}
-            />
-            <ReferenceLine
-              y={54}
-              stroke="#dc2626"
-              strokeDasharray="2 4"
-              strokeWidth={1}
-            />
+            {/* TIR zone reference lines */}
+            {refLines.map((r) => (
+              <ReferenceLine
+                key={r.y}
+                y={r.y}
+                stroke={r.color}
+                strokeDasharray={r.dash}
+                strokeWidth={1.5}
+                label={{
+                  value: r.label,
+                  position: r.y >= 180 ? 'insideTopRight' : 'insideBottomRight',
+                  fontSize: 10,
+                  fill: r.color,
+                }}
+              />
+            ))}
 
             <Area
               type="monotone"
               dataKey="sgv"
-              stroke="url(#glucoseGradient)"
+              stroke="url(#glStroke)"
               strokeWidth={2}
-              fill="url(#glucoseAreaFill)"
-              dot={showDots ? { r: 2.5, fill: '#22c55e', strokeWidth: 0 } : false}
-              activeDot={{ r: 5, fill: '#22c55e', stroke: '#fff', strokeWidth: 2 }}
+              fill="url(#glFill)"
+              dot={showDots ? { r: 2.5, strokeWidth: 0 } : false}
+              activeDot={{ r: 5, stroke: '#fff', strokeWidth: 2 }}
               isAnimationActive={true}
               animationDuration={600}
             />
