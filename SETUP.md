@@ -1,169 +1,138 @@
-# 🚀 Guia de Setup - Nightscout Modern
+# Guia de Setup — Nightscout Modern
 
-Este guia vai te ajudar a colocar o Nightscout Modern rodando em poucos minutos.
+## Pré-requisitos
 
-## 📋 Pré-requisitos
+- Docker e Docker Compose instalados
+- Nightscout rodando com MongoDB acessível na rede
+- IP livre na rede local para o backend e outro para o frontend
 
-Você já tem tudo o que precisa! ✅
-- ✅ Docker e Docker Compose instalados
-- ✅ Nightscout rodando no IP 10.0.0.226
-- ✅ MongoDB rodando no IP 10.0.0.225
-- ✅ Network MacVLAN configurada
+## Configuração
 
-## 🔧 Configuração Rápida
-
-### 1. Configure as Variáveis de Ambiente
+### 1. Variáveis de ambiente
 
 ```bash
-cd /home/dcastilho/nightscout-modern
-
-# Copie o arquivo de exemplo
-cp .env.example .env
-
-# Edite o arquivo .env
-nano .env
+cd nightscout-modern
+cp backend/.env.example backend/.env
+nano backend/.env
 ```
 
-**Variáveis obrigatórias:**
+Variáveis obrigatórias no `backend/.env`:
+
 ```bash
-# Copie o API_SECRET do seu Nightscout existente
-NIGHTSCOUT_API_SECRET=app-e708611ec4084fe7
+# MongoDB do Nightscout
+MONGODB_URI=mongodb://10.0.0.225:27017
+MONGODB_DB_NAME=test                        # banco padrão do Nightscout
+MONGODB_USER=                               # deixe vazio se sem auth
+MONGODB_PASSWORD=
 
-# Gere um novo JWT secret (pode usar qualquer string aleatória longa)
-NIGHTSCOUT_MODERN_JWT_SECRET=seu-jwt-secret-super-secreto-aqui-123456789
+# Segredos
+API_SECRET=seu-api-secret-do-nightscout
+JWT_SECRET=qualquer-string-aleatoria-longa
 
-# MongoDB (use os mesmos valores do seu Nightscout atual)
-MONGODB_USER=seu-usuario-mongodb
-MONGODB_PASSWORD=sua-senha-mongodb
+# CORS — IPs/domínios do frontend
+CORS_ORIGIN=http://10.0.0.231
 ```
 
-**Variáveis opcionais:**
-```bash
-# Para integração com LibreLink MCP (fase futura)
-LIBRELINK_USERNAME=seu-email-librelink
-LIBRELINK_PASSWORD=sua-senha-librelink
+O frontend não precisa de `.env` próprio — o IP do backend é fixado em tempo de build via `docker-compose.yml`.
+
+### 2. Ajustar IPs no docker-compose.yml
+
+Abra `docker-compose.yml` e edite os IPs MacVLAN conforme sua rede:
+
+```yaml
+nightscout-modern-backend:
+  networks:
+    macvlan:
+      ipv4_address: 10.0.0.229   # ← seu IP livre para o backend
+
+nightscout-modern-frontend:
+  build:
+    args:
+      VITE_API_URL: http://10.0.0.229:3001/api   # ← IP do backend acima
+  networks:
+    macvlan:
+      ipv4_address: 10.0.0.231   # ← seu IP livre para o frontend
 ```
 
-### 2. Build e Start
+### 3. Build e start
 
 ```bash
-# Build das imagens Docker
-docker-compose build
-
-# Start dos containers
-docker-compose up -d
-
-# Verifique os logs
-docker-compose logs -f
+docker compose build
+docker compose up -d
+docker compose logs -f          # acompanhe os logs
 ```
 
-### 3. Acesse a Aplicação
-
-- **Frontend**: http://10.0.0.231
-- **Backend API**: http://10.0.0.229:3001/api
-- **Health Check**: http://10.0.0.229:3001/api/health
-
-## 🧪 Testando a API
+### 4. Verificar
 
 ```bash
-# Health check
+# Backend saudável
 curl http://10.0.0.229:3001/api/health
 
-# Latest glucose
+# Última leitura de glicose
 curl http://10.0.0.229:3001/api/glucose/latest
-
-# Database stats
-curl http://10.0.0.229:3001/api/stats
-
-# 24h analytics (ajuste as datas)
-curl "http://10.0.0.229:3001/api/analytics?startDate=2024-01-20T00:00:00Z&endDate=2024-01-21T00:00:00Z"
 ```
 
-## 🛠️ Desenvolvimento Local (Opcional)
+Acesse o frontend pelo browser: `http://10.0.0.231`
 
-Se você quer desenvolver e testar localmente:
+---
 
-### Backend
+## Desenvolvimento Local
+
 ```bash
+# Backend (porta 3001)
 cd backend
 npm install
-cp .env.example .env
-# Configure o .env
-nano .env
 npm run dev
-```
 
-Acesse: http://localhost:3001/api
-
-### Frontend
-```bash
+# Frontend (porta 5173) — em outro terminal
 cd frontend
 npm install
-cp .env.example .env
-# Configure o .env
-nano .env
 npm run dev
 ```
 
-Acesse: http://localhost:5173
+O frontend em dev aponta para `http://localhost:3001` por padrão (configurado no `frontend/.env.development`).
 
-### Helper Script
+---
 
-Use o script helper para facilitar:
+## Atualizar após mudanças no código
 
 ```bash
-# Setup inicial (instala dependências)
-./dev.sh setup
+# Rebuild apenas o frontend (mais comum)
+cd frontend && npm run build
+docker compose build nightscout-modern-frontend
+docker compose up -d --force-recreate nightscout-modern-frontend
 
-# Start dev servers (backend + frontend em tmux)
-./dev.sh start
+# Rebuild o backend
+docker compose build nightscout-modern-backend
+docker compose up -d --force-recreate nightscout-modern-backend
 
-# Build Docker images
-./dev.sh build
-
-# Start containers
-./dev.sh up
-
-# View logs
-./dev.sh logs
-./dev.sh logs nightscout-modern-backend
-
-# Stop containers
-./dev.sh down
-
-# Clean everything
-./dev.sh clean
+# Rebuild tudo
+docker compose build && docker compose up -d
 ```
 
-## 🔍 Troubleshooting
+---
 
-### Container não inicia
+## Troubleshooting
+
+### Container não sobe
 
 ```bash
-# Verifique os logs
-docker-compose logs nightscout-modern-backend
-docker-compose logs nightscout-modern-frontend
-
-# Verifique se as portas estão livres
-netstat -tulpn | grep -E '3001|80'
-
-# Verifique a rede MacVLAN
-docker network inspect docker_macvlan
+docker compose logs nightscout-modern-backend
+docker compose logs nightscout-modern-frontend
 ```
 
-### MongoDB connection error
+### Erro de conexão ao MongoDB
 
 ```bash
-# Teste a conexão MongoDB
+# Entre no container e teste a conexão
 docker exec -it nightscout-modern-backend sh
-# Dentro do container:
 wget -O- http://10.0.0.225:27017
 ```
 
-Verifique se:
-- MongoDB está rodando: `docker ps | grep mongodb`
-- Credenciais estão corretas no `.env`
-- IP 10.0.0.225 está acessível
+Verifique:
+- MongoDB está rodando: `docker ps | grep mongo`
+- `MONGODB_URI` está correto no `.env`
+- IP do MongoDB está acessível na rede
 
 ### Frontend não carrega dados
 
@@ -171,70 +140,58 @@ Verifique se:
 # Teste o backend diretamente
 curl http://10.0.0.229:3001/api/health
 
-# Verifique as variáveis de ambiente do frontend
-docker exec -it nightscout-modern-frontend cat /etc/nginx/conf.d/default.conf
-
-# Verifique os logs do browser
-# Abra DevTools (F12) -> Console -> Network
+# Verifique se o CORS_ORIGIN inclui o IP do frontend
+# Verifique o console do browser (F12 → Network)
 ```
 
-### IP addresses conflitam
+### IPs em conflito
 
-Se os IPs 10.0.0.229 ou 10.0.0.231 já estão em uso:
+1. Edite `docker-compose.yml` com IPs livres na sua rede
+2. Atualize `CORS_ORIGIN` no `backend/.env`
+3. Atualize `VITE_API_URL` no `args` do build do frontend
+4. Rebuild completo: `docker compose down && docker compose build && docker compose up -d`
 
-1. Edite `docker-compose.yml`
-2. Mude os IPs para valores livres na sua rede
-3. Atualize o `CORS_ORIGIN` no backend
-4. Rebuild: `docker-compose down && docker-compose build && docker-compose up -d`
+---
 
-## 📱 Integrando com Cloudflare Tunnel
+## Cloudflare Tunnel (acesso externo)
 
-Para acessar de fora da sua rede local:
-
-1. Adicione ao seu tunnel Cloudflare existente:
+Adicione ao seu tunnel:
 
 ```yaml
 ingress:
-  - hostname: nightscout-modern.diegocastilho.me
+  - hostname: nightscout-modern.seudominio.com
     service: http://10.0.0.231
 ```
 
-2. Atualize o `CORS_ORIGIN` no `.env`:
+Atualize o `CORS_ORIGIN` no `backend/.env`:
 
 ```bash
-CORS_ORIGIN=http://10.0.0.231,https://nightscout-modern.diegocastilho.me
+CORS_ORIGIN=http://10.0.0.231,https://nightscout-modern.seudominio.com
 ```
 
-3. Rebuild o backend:
+Rebuild o backend:
 
 ```bash
-docker-compose up -d --build nightscout-modern-backend
+docker compose up -d --build nightscout-modern-backend
 ```
 
-## 🎉 Pronto!
+---
 
-Agora você tem:
-- ✅ Backend API rodando em 10.0.0.229:3001
-- ✅ Frontend rodando em 10.0.0.231
-- ✅ Analytics avançado de glicose
-- ✅ WebSocket para updates em tempo real
+## Comandos úteis
 
-## 📚 Próximos Passos
+```bash
+# Status dos containers
+docker compose ps
 
-1. **Explore a API**: http://10.0.0.229:3001/api
-2. **Customize a UI**: Edite os componentes em `frontend/src`
-3. **Adicione features**: Veja o [README.md](README.md) para o roadmap
+# Logs em tempo real
+docker compose logs -f
 
-## 💡 Dicas
+# Reiniciar um serviço
+docker compose restart nightscout-modern-frontend
 
-- Use `docker-compose logs -f` para monitorar em tempo real
-- O backend tem hot-reload em modo desenvolvimento
-- O frontend é compilado estaticamente (precisa rebuild para mudanças)
-- MongoDB change streams permitem updates em tempo real sem polling
+# Parar tudo
+docker compose down
 
-## 🆘 Precisa de Ajuda?
-
-- Verifique os logs: `docker-compose logs`
-- Teste a conexão MongoDB: `/api/stats`
-- Teste a API: `/api/health`
-- Veja o código de exemplo no `App.tsx`
+# Parar e remover volumes
+docker compose down -v
+```

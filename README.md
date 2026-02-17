@@ -1,259 +1,261 @@
-# 🩺 Nightscout Modern
+# Nightscout Modern
 
-Uma interface moderna, responsiva e rica em recursos para monitoramento contínuo de glicose (CGM) usando Nightscout.
+Interface moderna, responsiva e rica em recursos para monitoramento contínuo de glicose (CGM), construída sobre o banco de dados MongoDB do Nightscout existente.
 
-## ✨ Características
+> **v0.2-beta** — Dashboard interativo completo com gráficos, dark mode e seletor de período.
+
+---
+
+## Características
 
 ### Implementado ✅
-- ✅ Backend Node.js + Express + TypeScript
-- ✅ MongoDB direto (acesso otimizado aos dados)
-- ✅ Frontend React 18 + TypeScript + Vite
-- ✅ Tailwind CSS + shadcn/ui
-- ✅ API REST completa
-- ✅ WebSocket para updates em tempo real
-- ✅ Analytics avançado:
-  - Estatísticas de glicose (média, mediana, desvio padrão)
+
+**Backend**
+- Node.js 20 + Express + TypeScript
+- Acesso direto ao MongoDB do Nightscout (banco `test`)
+- API REST completa (glucose, analytics, patterns)
+- Analytics engine:
+  - Estatísticas: média, mediana, desvio padrão, mín/máx
   - GMI (Glucose Management Indicator)
   - Estimativa de HbA1c
   - Coeficiente de Variação (CV%)
-  - Time in Range (TIR) detalhado
-  - Padrões diários (hourly averages)
-  - Detecção automática de padrões (fenômeno do alvorecer, hipoglicemia noturna, etc.)
+  - Time in Range — 5 faixas com metas internacionais (TIR/TAR/TBR)
+  - Padrões diários por hora (P5/P25/P75/P95)
+  - Detecção automática de padrões:
+    - Fenômeno do alvorecer
+    - Hipoglicemia noturna
+    - Alta variabilidade
+    - Pico pós-prandial
+
+**Frontend**
+- React 18 + TypeScript + Vite
+- Tailwind CSS + shadcn/ui
+- PWA com Service Worker e cache offline
+- Dark mode persistido (toggle no header)
+- Seletor de período: 1h · 3h · 6h · 12h · 24h · 7d · 14d · 30d
+- Auto-refresh a cada 5 minutos
+
+**Gráficos**
+
+| Gráfico | Descrição |
+|---------|-----------|
+| **Leituras de Glicose** | AreaChart com gradiente dinâmico por zona TIR. Eixo X com ticks configurados por período. Tooltip com valor, seta de tendência e horário. |
+| **Tempo no Alvo (TIR)** | Barra horizontal empilhada + tabela com metas internacionais, tempo/dia real e indicadores ✓/✗. |
+| **Padrão Diário (AGP)** | Bandas de percentil P5–P25–P75–P95 + linha de mediana. Para ≤ 24h: timeline das últimas 24h com horas fora do período sombreadas. Para 7d+: padrão AGP clássico (00:00–23:00) com dados do período selecionado. |
+| **Cartão de Glicose Atual** | Valor em destaque (7xl) com cor por zona, seta de tendência, delta, badge de status e alerta de dados antigos. |
+| **Grid de Estatísticas** | 4 cards: Média · GMI · A1c Estimada · CV% com semáforo verde/amarelo/vermelho. |
+| **Alertas de Padrões** | Cards de alerta para padrões detectados com severidade (baixa/média/alta). |
 
 ### Em Desenvolvimento 🚧
-- 🚧 Gráficos interativos (Recharts)
-- 🚧 Integração Claude AI via MCP LibreLink
-- 🚧 PWA (Progressive Web App)
-- 🚧 Push Notifications
-- 🚧 Exportação PDF/Excel
-- 🚧 Visualização de tratamentos (insulina/carboidratos)
-- 🚧 AGP (Ambulatory Glucose Profile)
 
-## 🏗️ Arquitetura
+- Alarmes sonoros / Push Notifications (PWA)
+- Página de configurações (targets, unidades, nome)
+- Relatório PDF estilo AGP
+- Comparação de períodos
+- Zoom/pan no gráfico de glicose
+- Integração Claude AI via MCP LibreLink
+
+---
+
+## Arquitetura
 
 ```
 ┌─────────────────────────────────────┐
 │  Frontend (React + TypeScript)      │
 │  - Dashboard em tempo real          │
-│  - Charts e visualizações           │
-│  - PWA com Service Worker           │
+│  - 4 gráficos Recharts              │
+│  - PWA / Service Worker             │
+│  Nginx  →  http://10.0.0.231        │
 └────────────┬────────────────────────┘
-             │ REST API + WebSocket
+             │ REST API
 ┌────────────▼────────────────────────┐
 │  Backend (Node.js + Express)        │
 │  - API REST endpoints               │
-│  - WebSocket server (Socket.io)     │
 │  - Analytics engine                 │
-│  - MCP LibreLink integration        │
+│  Node.js  →  http://10.0.0.229:3001 │
 └────────────┬────────────────────────┘
              │
 ┌────────────▼────────────────────────┐
-│  MongoDB (Nightscout database)      │
+│  MongoDB  10.0.0.225:27017          │
+│  database: test (Nightscout)        │
 │  - entries (glucose readings)       │
-│  - treatments (insulin/carbs)       │
+│  - treatments                       │
 │  - devicestatus                     │
 └─────────────────────────────────────┘
 ```
 
-## 🚀 Quick Start
+**Rede:** MacVLAN — cada container tem IP próprio na rede local.
+
+---
+
+## Quick Start
 
 ### Pré-requisitos
 - Docker e Docker Compose
-- Nightscout rodando com MongoDB
-- Node.js 20+ (para desenvolvimento local)
+- Nightscout rodando com MongoDB acessível
+- Node.js 20+ (apenas para desenvolvimento local)
 
-### Instalação com Docker (Produção)
+### Deploy com Docker
 
-1. **Clone o repositório**
-   ```bash
-   cd /home/dcastilho/nightscout-modern
-   ```
+```bash
+# 1. Clone
+git clone https://github.com/diego-castilho/nightscout-modern.git
+cd nightscout-modern
 
-2. **Configure as variáveis de ambiente**
-   ```bash
-   cp backend/.env.example backend/.env
-   cp frontend/.env.example frontend/.env
-   ```
+# 2. Configure as variáveis de ambiente
+cp backend/.env.example backend/.env
+# edite backend/.env com suas configurações
 
-   Edite os arquivos `.env` com suas configurações.
+# 3. Build e start
+docker compose build
+docker compose up -d
 
-3. **Build e start**
-   ```bash
-   docker-compose up -d
-   ```
+# 4. Verifique os logs
+docker compose logs -f
+```
 
-4. **Acesse a aplicação**
-   - Frontend: http://10.0.0.231
-   - Backend API: http://10.0.0.229:3001/api
+**Acesso:**
+- Frontend: `http://10.0.0.231`
+- Backend API: `http://10.0.0.229:3001/api`
+- Health check: `http://10.0.0.229:3001/api/health`
 
 ### Desenvolvimento Local
 
-#### Backend
 ```bash
-cd backend
-npm install
-npm run dev
+# Backend
+cd backend && npm install && npm run dev
+
+# Frontend (outro terminal)
+cd frontend && npm install && npm run dev
 ```
 
-#### Frontend
+---
+
+## API Endpoints
+
+### Saúde e Stats
+```
+GET /api/health          — Health check
+GET /api/stats           — Estatísticas do banco de dados
+```
+
+### Glicose
+```
+GET /api/glucose         — Leituras com filtros (startDate, endDate, limit)
+GET /api/glucose/latest  — Leitura mais recente
+GET /api/glucose/range   — Leituras em intervalo de datas
+```
+
+### Analytics
+```
+GET /api/analytics               — Relatório completo (stats + TIR + padrões)
+GET /api/analytics/stats         — Estatísticas de glicose
+GET /api/analytics/tir           — Time in Range
+GET /api/analytics/patterns      — Padrões diários por hora (P5/P25/P75/P95)
+GET /api/analytics/detect        — Detecção de padrões glicêmicos
+```
+
+**Parâmetros:** todos os endpoints de analytics aceitam `startDate` e `endDate` (ISO 8601).
+
 ```bash
-cd frontend
-npm install
-npm run dev
+# Exemplo: analytics das últimas 24h
+curl "http://10.0.0.229:3001/api/analytics?startDate=2025-01-01T00:00:00Z&endDate=2025-01-02T00:00:00Z"
+
+# Última leitura
+curl http://10.0.0.229:3001/api/glucose/latest
 ```
 
-## 📡 API Endpoints
+---
 
-### Health & Stats
-- `GET /api/health` - Health check
-- `GET /api/stats` - Database statistics
+## Zonas TIR (Time in Range)
 
-### Glucose Endpoints
-- `GET /api/glucose` - Get glucose entries (with filters)
-- `GET /api/glucose/latest` - Get latest glucose reading
-- `GET /api/glucose/range` - Get glucose in date range
+| Zona | Faixa | Cor | Meta Internacional |
+|------|-------|-----|-------------------|
+| Muito Alto | > 250 mg/dL | Vermelho | < 5% |
+| Alto | 180–250 mg/dL | Âmbar | < 25% |
+| **Alvo** | **70–180 mg/dL** | **Verde** | **> 70%** |
+| Baixo | 54–70 mg/dL | Laranja | < 4% |
+| Muito Baixo | < 54 mg/dL | Vermelho | < 1% |
 
-### Analytics Endpoints
-- `GET /api/analytics` - Complete analytics report
-- `GET /api/analytics/stats` - Glucose statistics only
-- `GET /api/analytics/tir` - Time in Range statistics
-- `GET /api/analytics/patterns` - Daily patterns (hourly)
-- `GET /api/analytics/detect` - Detect glucose patterns
+---
 
-### Exemplo de Request
-```bash
-# Get latest glucose
-curl http://localhost:3001/api/glucose/latest
-
-# Get 24h analytics
-curl "http://localhost:3001/api/analytics?startDate=2024-01-20T00:00:00Z&endDate=2024-01-21T00:00:00Z"
-```
-
-## 🔌 WebSocket Events
-
-Conecte ao WebSocket para receber updates em tempo real:
-
-```javascript
-import io from 'socket.io-client';
-
-const socket = io('ws://localhost:3001');
-
-// New glucose reading
-socket.on('glucose:new', (data) => {
-  console.log('New glucose:', data);
-});
-
-// New treatment
-socket.on('treatment:new', (data) => {
-  console.log('New treatment:', data);
-});
-
-// Device status update
-socket.on('deviceStatus:new', (data) => {
-  console.log('Device status:', data);
-});
-```
-
-## 📊 Analytics Explicados
-
-### GMI (Glucose Management Indicator)
-Estimativa de HbA1c baseada na média de glicose.
-- Fórmula: `GMI = 3.31 + 0.02392 × média_glicose`
-- Alvo: < 7.0%
-
-### Coeficiente de Variação (CV%)
-Mede a estabilidade glicêmica.
-- Fórmula: `CV = (desvio_padrão / média) × 100`
-- Alvo: < 36%
-
-### Time in Range (TIR)
-Porcentagem de leituras em diferentes faixas:
-- **Very Low**: < 54 mg/dL (hipoglicemia grave)
-- **Low**: 54-70 mg/dL (hipoglicemia)
-- **In Range**: 70-180 mg/dL (alvo ✅)
-- **High**: 180-250 mg/dL (hiperglicemia)
-- **Very High**: > 250 mg/dL (hiperglicemia grave)
-
-Alvo: **> 70% Time in Range**
-
-## 🛠️ Stack Tecnológica
+## Stack Tecnológica
 
 ### Backend
-- **Runtime**: Node.js 20
-- **Framework**: Express.js
-- **Language**: TypeScript
-- **Database**: MongoDB (driver nativo)
-- **WebSocket**: Socket.io
-- **Validation**: Zod
+| | |
+|-|-|
+| Runtime | Node.js 20 |
+| Framework | Express.js |
+| Linguagem | TypeScript |
+| Banco de Dados | MongoDB (driver nativo) |
+| Validação | Zod |
 
 ### Frontend
-- **Framework**: React 18
-- **Build Tool**: Vite
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **Components**: shadcn/ui
-- **Charts**: Recharts
-- **State**: Zustand
-- **HTTP Client**: Axios
-- **PWA**: Vite PWA Plugin
+| | |
+|-|-|
+| Framework | React 18 |
+| Build | Vite 5 |
+| Linguagem | TypeScript |
+| Estilos | Tailwind CSS + shadcn/ui |
+| Gráficos | Recharts 2 |
+| Estado Global | Zustand (com persist) |
+| HTTP | Axios |
+| Datas | date-fns (pt-BR) |
+| PWA | vite-plugin-pwa |
 
 ### DevOps
-- **Containerization**: Docker
-- **Orchestration**: Docker Compose
-- **Web Server**: Nginx (frontend)
-- **Network**: MacVLAN
+| | |
+|-|-|
+| Containerização | Docker |
+| Orquestração | Docker Compose |
+| Web Server | Nginx (frontend) |
+| Rede | MacVLAN |
 
-## 📝 Roadmap
+---
 
-### Fase 1: Fundação ✅ (Completo)
-- [x] Setup backend
-- [x] Setup frontend
-- [x] MongoDB connection
-- [x] API REST básica
-- [x] Analytics engine
+## Roadmap
 
-### Fase 2: Dashboard Core 🚧 (Em Progresso)
-- [ ] Componente de gráfico principal
-- [ ] Time in Range visualization
-- [ ] Cards de métricas
-- [ ] Filtros de período
-- [ ] Dark mode
-- [ ] Layout responsivo
+### Fase 1 — Fundação ✅
+- Backend + API REST
+- MongoDB integration
+- Analytics engine
 
-### Fase 3: Tempo Real + PWA
-- [ ] WebSocket integration
-- [ ] Auto-refresh
-- [ ] PWA manifest
-- [ ] Service Worker
-- [ ] Offline caching
+### Fase 2 — Dashboard Core ✅
+- Gráfico de glicose (AreaChart com gradiente TIR)
+- Time in Range (barra + tabela)
+- Padrão Diário AGP (bandas de percentil)
+- Cards de métricas (Média, GMI, A1c, CV%)
+- Seletor de período (1h a 30d)
+- Dark mode persistido
+- PWA / Service Worker
+- Detecção de padrões (alertas)
+- Auto-refresh a 5 min
 
-### Fase 4: Analytics Avançado
-- [ ] Gráficos de distribuição
-- [ ] AGP (Ambulatory Glucose Profile)
-- [ ] Análise de tratamentos
-- [ ] Comparativo de períodos
+### Fase 3 — Notificações (próximo)
+- Alarmes sonoros (hipo/hiper)
+- Push Notifications via PWA
+- Thresholds configuráveis
 
-### Fase 5: Integrações Premium
-- [ ] Claude AI via MCP
-- [ ] Push Notifications
-- [ ] PDF Export
-- [ ] Excel Export
+### Fase 4 — Configurações
+- Página de settings (targets, unidades, perfil)
+- Suporte mmol/L
 
-### Fase 6: Deploy + Refinamentos
-- [ ] Documentação completa
-- [ ] Testes automatizados
-- [ ] CI/CD pipeline
-- [ ] Polimento UI/UX
+### Fase 5 — Relatórios
+- PDF estilo AGP
+- Resumo semanal
+- Export CSV
 
-## 🤝 Contribuindo
+### Fase 6 — Integrações
+- Claude AI via MCP LibreLink
+- Dados de loop (AndroidAPS / Loop)
 
-Este é um projeto pessoal, mas sugestões e feedback são bem-vindos!
+---
 
-## 📄 Licença
+## Licença
 
-MIT License - Diego Castilho
+MIT — Diego Castilho
 
-## 🔗 Links Relacionados
+## Links
 
 - [Nightscout Project](https://nightscout.github.io/)
-- [LibreLink MCP Server](https://github.com/sedoglia/librelink-mcp-server)
+- [GitHub](https://github.com/diego-castilho/nightscout-modern)
