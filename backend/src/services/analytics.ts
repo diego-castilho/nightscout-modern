@@ -98,7 +98,14 @@ export function calculateGlucoseStats(entries: GlucoseEntry[]): GlucoseStats {
 // Time in Range (TIR) Calculations
 // ============================================================================
 
-export function calculateTimeInRange(entries: GlucoseEntry[]): TimeInRange {
+export interface TIRThresholds {
+  veryLow?: number;  // mg/dL, default 54
+  low?: number;      // mg/dL, default 70
+  high?: number;     // mg/dL, default 180
+  veryHigh?: number; // mg/dL, default 250
+}
+
+export function calculateTimeInRange(entries: GlucoseEntry[], thresholds: TIRThresholds = {}): TimeInRange {
   if (entries.length === 0) {
     return {
       veryLow: 0,
@@ -114,19 +121,24 @@ export function calculateTimeInRange(entries: GlucoseEntry[]): TimeInRange {
     };
   }
 
+  const tVeryLow  = thresholds.veryLow  ?? 54;
+  const tLow      = thresholds.low      ?? 70;
+  const tHigh     = thresholds.high     ?? 180;
+  const tVeryHigh = thresholds.veryHigh ?? 250;
+
   const total = entries.length;
-  let veryLow = 0; // < 54 mg/dL
-  let low = 0; // 54-70 mg/dL
-  let inRange = 0; // 70-180 mg/dL (target range)
-  let high = 0; // 180-250 mg/dL
-  let veryHigh = 0; // > 250 mg/dL
+  let veryLow = 0;
+  let low = 0;
+  let inRange = 0;
+  let high = 0;
+  let veryHigh = 0;
 
   entries.forEach((entry) => {
     const sgv = entry.sgv;
-    if (sgv < 54) veryLow++;
-    else if (sgv < 70) low++;
-    else if (sgv <= 180) inRange++;
-    else if (sgv <= 250) high++;
+    if (sgv < tVeryLow) veryLow++;
+    else if (sgv < tLow) low++;
+    else if (sgv <= tHigh) inRange++;
+    else if (sgv <= tVeryHigh) high++;
     else veryHigh++;
   });
 
@@ -190,7 +202,8 @@ export function calculateDailyPatterns(entries: GlucoseEntry[]): DailyPattern[] 
 export function generateAnalytics(
   entries: GlucoseEntry[],
   startDate: Date,
-  endDate: Date
+  endDate: Date,
+  thresholds: TIRThresholds = {}
 ): GlucoseAnalytics {
   const daysDiff = Math.ceil(
     (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
@@ -203,7 +216,7 @@ export function generateAnalytics(
       days: daysDiff,
     },
     stats: calculateGlucoseStats(entries),
-    timeInRange: calculateTimeInRange(entries),
+    timeInRange: calculateTimeInRange(entries, thresholds),
     dailyPatterns: calculateDailyPatterns(entries),
     totalReadings: entries.length,
   };

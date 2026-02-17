@@ -7,6 +7,7 @@ import { useDashboardStore } from '../stores/dashboardStore';
 import { fromDisplayUnit, toDisplayUnit, unitLabel } from '../lib/glucose';
 import type { GlucoseUnit } from '../lib/glucose';
 import type { AlarmThresholds } from '../stores/dashboardStore';
+import { saveSettings } from '../lib/api';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Input } from '../components/ui/input';
@@ -62,6 +63,12 @@ export function SettingsPage() {
 
   function handleUnitChange(newUnit: GlucoseUnit) {
     setUnit(newUnit);
+    saveSettings({ unit: newUnit }).catch(() => {});
+  }
+
+  function handleRefreshIntervalChange(minutes: number) {
+    setRefreshInterval(minutes);
+    saveSettings({ refreshInterval: minutes }).catch(() => {});
   }
 
   function handleThresholdChange(
@@ -100,13 +107,25 @@ export function SettingsPage() {
   function handleSave() {
     if (!validate()) return;
 
-    setPatientName(localName.trim());
-    setAlarmThresholds({
+    const newName = localName.trim();
+    const newThresholds: AlarmThresholds = {
       veryLow:  fromDisplayUnit(localThresholds.veryLow,  unit),
       low:      fromDisplayUnit(localThresholds.low,       unit),
       high:     fromDisplayUnit(localThresholds.high,      unit),
       veryHigh: fromDisplayUnit(localThresholds.veryHigh,  unit),
-    });
+    };
+
+    setPatientName(newName);
+    setAlarmThresholds(newThresholds);
+
+    // Persist to server so settings are shared across all devices
+    saveSettings({
+      unit,
+      patientName:     newName,
+      refreshInterval,
+      alarmEnabled,
+      alarmThresholds: newThresholds,
+    }).catch(() => { /* Server unreachable — localStorage still updated */ });
 
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -121,6 +140,8 @@ export function SettingsPage() {
       veryHigh: toDisplayUnit(DEFAULT_THRESHOLDS_MGDL.veryHigh,  unit),
     });
     setErrors([]);
+
+    saveSettings({ alarmThresholds: DEFAULT_THRESHOLDS_MGDL }).catch(() => {});
   }
 
   const step = unit === 'mmol' ? '0.1' : '1';
@@ -190,7 +211,7 @@ export function SettingsPage() {
               <Select
                 id="refreshInterval"
                 value={String(refreshInterval)}
-                onChange={(e) => setRefreshInterval(Number(e.target.value))}
+                onChange={(e) => handleRefreshIntervalChange(Number(e.target.value))}
                 className="max-w-[180px]"
               >
                 {REFRESH_OPTIONS.map((opt) => (

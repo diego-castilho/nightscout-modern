@@ -5,6 +5,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { GlucoseUnit } from '../lib/glucose';
+import type { AppSettings } from '../lib/api';
 
 export type Period = '1h' | '3h' | '6h' | '12h' | '24h' | '7d' | '14d' | '30d';
 
@@ -37,6 +38,7 @@ interface DashboardState {
   setUnit: (unit: GlucoseUnit) => void;
   setPatientName: (name: string) => void;
   setRefreshInterval: (minutes: number) => void;
+  initFromServer: (settings: AppSettings) => void;
 }
 
 export const useDashboardStore = create<DashboardState>()(
@@ -75,6 +77,14 @@ export const useDashboardStore = create<DashboardState>()(
       setPatientName: (patientName) => set({ patientName }),
 
       setRefreshInterval: (refreshInterval) => set({ refreshInterval }),
+
+      initFromServer: (settings) => set((state) => ({
+        unit:            settings.unit            ?? state.unit,
+        patientName:     settings.patientName     ?? state.patientName,
+        refreshInterval: settings.refreshInterval ?? state.refreshInterval,
+        alarmEnabled:    settings.alarmEnabled    ?? state.alarmEnabled,
+        alarmThresholds: settings.alarmThresholds ?? state.alarmThresholds,
+      })),
     }),
     {
       name: 'nightscout-dashboard',

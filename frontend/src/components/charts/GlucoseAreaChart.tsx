@@ -19,9 +19,9 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import type { GlucoseEntry } from '../../lib/api';
-import { useDashboardStore, type Period } from '../../stores/dashboardStore';
+import { useDashboardStore, type Period, type AlarmThresholds } from '../../stores/dashboardStore';
 import { getTrendArrow } from '../../lib/utils';
-import { formatGlucose, unitLabel, toDisplayUnit } from '../../lib/glucose';
+import { formatGlucose, unitLabel } from '../../lib/glucose';
 
 interface Props {
   entries: GlucoseEntry[];
@@ -53,33 +53,33 @@ function toOffset(val: number, minVal: number, maxVal: number): string {
 }
 
 // Determines the zone color at a given glucose value
-function zoneColor(val: number): string {
-  if (val > 250) return ZONE.veryHigh;
-  if (val > 180) return ZONE.high;
-  if (val >= 70) return ZONE.inRange;
-  if (val >= 54) return ZONE.low;
+function zoneColor(val: number, t: AlarmThresholds): string {
+  if (val > t.veryHigh) return ZONE.veryHigh;
+  if (val > t.high)     return ZONE.high;
+  if (val >= t.low)     return ZONE.inRange;
+  if (val >= t.veryLow) return ZONE.low;
   return ZONE.veryLow;
 }
 
 // Builds gradient stops with exact boundary positions for the stroke
-function buildStrokeStops(minVal: number, maxVal: number) {
-  const thresholds = [250, 180, 70, 54];
+function buildStrokeStops(minVal: number, maxVal: number, t: AlarmThresholds) {
+  const thresholds = [t.veryHigh, t.high, t.low, t.veryLow]; // descending
   const stops: { offset: string; color: string }[] = [];
 
   // Top boundary
-  stops.push({ offset: '0%', color: zoneColor(maxVal) });
+  stops.push({ offset: '0%', color: zoneColor(maxVal, t) });
 
   // Add a stop pair at each threshold that falls within [minVal, maxVal]
-  for (const t of thresholds) {
-    if (t < maxVal && t > minVal) {
-      const off = toOffset(t, minVal, maxVal);
-      stops.push({ offset: off, color: zoneColor(t + 1) }); // just above threshold
-      stops.push({ offset: off, color: zoneColor(t - 1) }); // just below threshold
+  for (const thresh of thresholds) {
+    if (thresh < maxVal && thresh > minVal) {
+      const off = toOffset(thresh, minVal, maxVal);
+      stops.push({ offset: off, color: zoneColor(thresh + 1, t) }); // just above threshold
+      stops.push({ offset: off, color: zoneColor(thresh - 1, t) }); // just below threshold
     }
   }
 
   // Bottom boundary
-  stops.push({ offset: '100%', color: zoneColor(minVal) });
+  stops.push({ offset: '100%', color: zoneColor(minVal, t) });
 
   return stops;
 }
@@ -110,12 +110,13 @@ interface CustomTooltipProps {
 
 interface CustomTooltipWithUnitProps extends CustomTooltipProps {
   unit: import('../../lib/glucose').GlucoseUnit;
+  thresholds: AlarmThresholds;
 }
 
-function CustomTooltip({ active, payload, unit }: CustomTooltipWithUnitProps) {
+function CustomTooltip({ active, payload, unit, thresholds }: CustomTooltipWithUnitProps) {
   if (!active || !payload?.length) return null;
   const point = payload[0].payload;
-  const color = zoneColor(point.sgv);
+  const color = zoneColor(point.sgv, thresholds);
   return (
     <div className="bg-background border border-border rounded-lg shadow-lg p-3 text-sm">
       <p className="text-muted-foreground text-xs mb-1">
@@ -129,7 +130,7 @@ function CustomTooltip({ active, payload, unit }: CustomTooltipWithUnitProps) {
 }
 
 export function GlucoseAreaChart({ entries, loading }: Props) {
-  const { period, unit } = useDashboardStore();
+  const { period, unit, alarmThresholds } = useDashboardStore();
 
   if (loading) {
     return (
@@ -165,14 +166,14 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
   const { ticks, formatStr } = getTickConfig(period, data[0].time, data[data.length - 1].time);
   const showDots = data.length <= 20;
 
-  const strokeStops = buildStrokeStops(minVal, maxVal);
+  const strokeStops = buildStrokeStops(minVal, maxVal, alarmThresholds);
 
   // Reference lines only if threshold is within the Y range
   const refLines: { y: number; color: string; label: string; dash: string }[] = [
-    { y: 250, color: ZONE.veryHigh, label: '250', dash: '3 4' },
-    { y: 180, color: ZONE.high,     label: '180', dash: '4 4' },
-    { y: 70,  color: ZONE.low,      label: '70',  dash: '4 4' },
-    { y: 54,  color: ZONE.veryLow,  label: '54',  dash: '2 4' },
+    { y: alarmThresholds.veryHigh, color: ZONE.veryHigh, label: String(alarmThresholds.veryHigh), dash: '3 4' },
+    { y: alarmThresholds.high,     color: ZONE.high,     label: String(alarmThresholds.high),     dash: '4 4' },
+    { y: alarmThresholds.low,      color: ZONE.low,      label: String(alarmThresholds.low),       dash: '4 4' },
+    { y: alarmThresholds.veryLow,  color: ZONE.veryLow,  label: String(alarmThresholds.veryLow),  dash: '2 4' },
   ].filter((r) => r.y > minVal && r.y < maxVal);
 
   return (
@@ -228,7 +229,7 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
               tickFormatter={(v: number) => formatGlucose(v, unit)}
             />
 
-            <Tooltip content={<CustomTooltip unit={unit} />} />
+            <Tooltip content={<CustomTooltip unit={unit} thresholds={alarmThresholds} />} />
 
             {/* TIR zone reference lines */}
             {refLines.map((r) => (
@@ -239,7 +240,7 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
                 strokeDasharray={r.dash}
                 strokeWidth={1.5}
                 label={{
-                  value: `${toDisplayUnit(r.y, unit)}`,
+                  value: `${formatGlucose(r.y, unit)}`,
                   position: r.y >= 180 ? 'insideTopRight' : 'insideBottomRight',
                   fontSize: 10,
                   fill: r.color,

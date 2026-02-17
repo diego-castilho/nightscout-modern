@@ -5,6 +5,7 @@
 import { Router } from 'express';
 import glucoseRouter from './glucose.js';
 import analyticsRouter from './analytics.js';
+import settingsRouter from './settings.js';
 import { getDatabaseStats } from '../db/queries.js';
 
 const router = Router();
@@ -148,5 +149,6 @@ router.get('/debug/databases', async (_req, res) => {
 // Mount route modules
 router.use('/glucose', glucoseRouter);
 router.use('/analytics', analyticsRouter);
+router.use('/settings', settingsRouter);
 
 export default router;

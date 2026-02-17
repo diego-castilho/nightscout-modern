@@ -18,7 +18,7 @@ const router = Router();
 // GET /api/analytics - Get complete analytics for a date range
 router.get('/', async (req, res) => {
   try {
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, veryLow, low, high, veryHigh } = req.query;
 
     if (!startDate || !endDate) {
       return res.status(400).json({
@@ -31,8 +31,15 @@ router.get('/', async (req, res) => {
     const start = new Date(startDate as string);
     const end = new Date(endDate as string);
 
+    const thresholds = {
+      veryLow:  veryLow  ? Number(veryLow)  : undefined,
+      low:      low      ? Number(low)      : undefined,
+      high:     high     ? Number(high)     : undefined,
+      veryHigh: veryHigh ? Number(veryHigh) : undefined,
+    };
+
     const entries = await getGlucoseByDateRange(start, end);
-    const analytics = generateAnalytics(entries, start, end);
+    const analytics = generateAnalytics(entries, start, end, thresholds);
 
     const response: ApiResponse = {
       success: true,

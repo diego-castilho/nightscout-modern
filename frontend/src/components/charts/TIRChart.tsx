@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { toDisplayUnit, unitLabel } from '../../lib/glucose';
 import { useDashboardStore } from '../../stores/dashboardStore';
 import type { TimeInRange } from '../../lib/api';
+import type { AlarmThresholds } from '../../stores/dashboardStore';
 
 interface Props {
   tir: TimeInRange | null;
@@ -29,73 +30,75 @@ interface RangeRow {
   countKey: keyof TimeInRange;
 }
 
-const RANGES: RangeRow[] = [
-  {
-    label: 'Muito Alto',
-    range: '>250',
-    thresholdLow: 250,
-    targetLabel: 'Menor que 5%',
-    targetPct: 5,
-    targetOp: '<=',
-    color: '#dc2626',
-    bgColor: 'bg-red-600',
-    textColor: 'text-red-600 dark:text-red-400',
-    percentKey: 'percentVeryHigh',
-    countKey: 'veryHigh',
-  },
-  {
-    label: 'Alto',
-    range: '180–250',
-    thresholdLow: 180, thresholdHigh: 250,
-    targetLabel: 'Menor que 25%',
-    targetPct: 25,
-    targetOp: '<=',
-    color: '#f59e0b',
-    bgColor: 'bg-amber-500',
-    textColor: 'text-amber-500 dark:text-amber-400',
-    percentKey: 'percentHigh',
-    countKey: 'high',
-  },
-  {
-    label: 'Alvo',
-    range: '70–180',
-    thresholdLow: 70, thresholdHigh: 180,
-    targetLabel: 'Maior que 70%',
-    targetPct: 70,
-    targetOp: '>=',
-    color: '#22c55e',
-    bgColor: 'bg-green-500',
-    textColor: 'text-green-600 dark:text-green-400',
-    percentKey: 'percentInRange',
-    countKey: 'inRange',
-  },
-  {
-    label: 'Baixo',
-    range: '54–70',
-    thresholdLow: 54, thresholdHigh: 70,
-    targetLabel: 'Menor que 4%',
-    targetPct: 4,
-    targetOp: '<=',
-    color: '#f97316',
-    bgColor: 'bg-orange-500',
-    textColor: 'text-orange-500 dark:text-orange-400',
-    percentKey: 'percentLow',
-    countKey: 'low',
-  },
-  {
-    label: 'Muito Baixo',
-    range: '<54',
-    thresholdHigh: 54,
-    targetLabel: 'Menor que 1%',
-    targetPct: 1,
-    targetOp: '<=',
-    color: '#dc2626',
-    bgColor: 'bg-red-700',
-    textColor: 'text-red-700 dark:text-red-400',
-    percentKey: 'percentVeryLow',
-    countKey: 'veryLow',
-  },
-];
+function buildRanges(t: AlarmThresholds): RangeRow[] {
+  return [
+    {
+      label: 'Muito Alto',
+      range: `>${t.veryHigh}`,
+      thresholdLow: t.veryHigh,
+      targetLabel: 'Menor que 5%',
+      targetPct: 5,
+      targetOp: '<=',
+      color: '#dc2626',
+      bgColor: 'bg-red-600',
+      textColor: 'text-red-600 dark:text-red-400',
+      percentKey: 'percentVeryHigh',
+      countKey: 'veryHigh',
+    },
+    {
+      label: 'Alto',
+      range: `${t.high}–${t.veryHigh}`,
+      thresholdLow: t.high, thresholdHigh: t.veryHigh,
+      targetLabel: 'Menor que 25%',
+      targetPct: 25,
+      targetOp: '<=',
+      color: '#f59e0b',
+      bgColor: 'bg-amber-500',
+      textColor: 'text-amber-500 dark:text-amber-400',
+      percentKey: 'percentHigh',
+      countKey: 'high',
+    },
+    {
+      label: 'Alvo',
+      range: `${t.low}–${t.high}`,
+      thresholdLow: t.low, thresholdHigh: t.high,
+      targetLabel: 'Maior que 70%',
+      targetPct: 70,
+      targetOp: '>=',
+      color: '#22c55e',
+      bgColor: 'bg-green-500',
+      textColor: 'text-green-600 dark:text-green-400',
+      percentKey: 'percentInRange',
+      countKey: 'inRange',
+    },
+    {
+      label: 'Baixo',
+      range: `${t.veryLow}–${t.low}`,
+      thresholdLow: t.veryLow, thresholdHigh: t.low,
+      targetLabel: 'Menor que 4%',
+      targetPct: 4,
+      targetOp: '<=',
+      color: '#f97316',
+      bgColor: 'bg-orange-500',
+      textColor: 'text-orange-500 dark:text-orange-400',
+      percentKey: 'percentLow',
+      countKey: 'low',
+    },
+    {
+      label: 'Muito Baixo',
+      range: `<${t.veryLow}`,
+      thresholdHigh: t.veryLow,
+      targetLabel: 'Menor que 1%',
+      targetPct: 1,
+      targetOp: '<=',
+      color: '#dc2626',
+      bgColor: 'bg-red-700',
+      textColor: 'text-red-700 dark:text-red-400',
+      percentKey: 'percentVeryLow',
+      countKey: 'veryLow',
+    },
+  ];
+}
 
 function pctToTime(pct: number): string {
   const totalMinutes = Math.round((pct / 100) * 24 * 60);
@@ -123,8 +126,9 @@ function rangeLabel(seg: RangeRow, ul: string): string {
 }
 
 export function TIRChart({ tir, loading, totalReadings }: Props) {
-  const { unit } = useDashboardStore();
+  const { unit, alarmThresholds } = useDashboardStore();
   const ul = unitLabel(unit);
+  const RANGES = buildRanges(alarmThresholds);
   if (loading) {
     return (
       <Card>

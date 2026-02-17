@@ -16,7 +16,7 @@ interface GlucoseDataState {
 }
 
 export function useGlucoseData() {
-  const { period, lastRefresh, refreshInterval } = useDashboardStore();
+  const { period, lastRefresh, refreshInterval, alarmThresholds } = useDashboardStore();
   const [state, setState] = useState<GlucoseDataState>({
     entries: [],
     latest: null,
@@ -37,7 +37,7 @@ export function useGlucoseData() {
         const [entriesRes, latestRes, analyticsRes] = await Promise.all([
           getGlucoseRange(startDate, endDate),
           getLatestGlucose(),
-          getAnalytics(startDate, endDate),
+          getAnalytics(startDate, endDate, alarmThresholds),
         ]);
 
         if (cancelled) return;
@@ -68,7 +68,7 @@ export function useGlucoseData() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [period, lastRefresh, refreshInterval]);
+  }, [period, lastRefresh, refreshInterval, alarmThresholds]);
 
   return state;
 }

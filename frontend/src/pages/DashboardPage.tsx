@@ -2,11 +2,12 @@
 // DashboardPage - Main glucose monitoring dashboard
 // ============================================================================
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useGlucoseData } from '../hooks/useGlucoseData';
 import { useAlarm } from '../hooks/useAlarm';
 import { useDashboardStore, getPeriodDates } from '../stores/dashboardStore';
 import { detectPatterns } from '../lib/api';
+import { globalAudioAlarm } from '../lib/audioAlarm';
 import { formatGlucose, unitLabel } from '../lib/glucose';
 import type { DetectedPattern } from '../lib/api';
 
@@ -23,13 +24,31 @@ import { AlertCircle, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 
 export function DashboardPage() {
-  const { period, lastRefresh, triggerRefresh, unit } = useDashboardStore();
+  const { period, lastRefresh, triggerRefresh, unit, alarmEnabled } = useDashboardStore();
   const { entries, latest, analytics, loading, error } = useGlucoseData();
   const [patterns, setPatterns] = useState<DetectedPattern[]>([]);
   const [patternsLoading, setPatternsLoading] = useState(true);
 
   // Alarm banner state
   const [alarmBanner, setAlarmBanner] = useState<{ zone: string; sgv: number } | null>(null);
+
+  // Auto-enable AudioContext on first user interaction (needed after page reload)
+  const audioListenerAttached = useRef(false);
+  useEffect(() => {
+    if (!alarmEnabled || globalAudioAlarm.isEnabled() || audioListenerAttached.current) return;
+    audioListenerAttached.current = true;
+
+    const enable = () => { globalAudioAlarm.enable(); };
+    document.addEventListener('click',      enable, { once: true });
+    document.addEventListener('keydown',    enable, { once: true });
+    document.addEventListener('touchstart', enable, { once: true });
+
+    return () => {
+      document.removeEventListener('click',      enable);
+      document.removeEventListener('keydown',    enable);
+      document.removeEventListener('touchstart', enable);
+    };
+  }, [alarmEnabled]);
 
   const handleAlarm = useCallback((zone: string, sgv: number) => {
     setAlarmBanner({ zone, sgv });
