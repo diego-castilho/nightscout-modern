@@ -23,9 +23,12 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { getAnalytics } from '../../lib/api';
 import type { DailyPattern } from '../../lib/api';
-import { useDashboardStore, type Period } from '../../stores/dashboardStore';
+import { useDashboardStore, getPeriodDates, type Period } from '../../stores/dashboardStore';
 
-// Period → hours in the active selection window (undefined = 24h+, no dimming)
+// Periods that keep the original AGP behaviour (selected-period data, 00:00–23:00 axis)
+const LONG_PERIODS: Period[] = ['7d', '14d', '30d'];
+
+// Period → hours in the active selection window for the 24h-timeline mode
 const PERIOD_HOURS: Partial<Record<Period, number>> = {
   '1h': 1, '3h': 3, '6h': 6, '12h': 12,
 };
@@ -77,13 +80,17 @@ export function DailyPatternChart() {
   const [patterns, setPatterns] = useState<DailyPattern[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Always fetch the last 24h — independent of selected period
+  const isLongPeriod = LONG_PERIODS.includes(period);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
 
-    const endDate   = new Date().toISOString();
-    const startDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    // Long periods (7d/14d/30d): use the selected period for richer AGP patterns.
+    // Short periods (≤ 24h): always fetch the last 24h for the timeline view.
+    const { startDate, endDate } = isLongPeriod
+      ? getPeriodDates(period)
+      : { endDate: new Date().toISOString(), startDate: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() };
 
     getAnalytics(startDate, endDate)
       .then((data) => {
@@ -100,7 +107,7 @@ export function DailyPatternChart() {
       });
 
     return () => { cancelled = true; };
-  }, [lastRefresh]); // refetch only on manual refresh
+  }, [period, lastRefresh]);
 
   if (loading) {
     return (
@@ -153,21 +160,23 @@ export function DailyPatternChart() {
       };
     });
 
-  // Reorder to start from (currentHour + 1) → currentHour so that
-  // the left edge = "24h ago" and the right edge = "now".
-  // Example: currentHour=14 → [15,16,…,23, 0,1,…,14]
-  const data: ChartPoint[] = [
-    ...rawData.filter((d) => d.hourNum > currentHour),
-    ...rawData.filter((d) => d.hourNum <= currentHour),
-  ];
+  // ── Long periods (7d/14d/30d): classic AGP layout 00:00 → 23:00 ────────
+  // ── Short periods (≤ 24h):     timeline layout (currentHour+1) → currentHour ─
+  const data: ChartPoint[] = isLongPeriod
+    ? rawData
+    : [
+        ...rawData.filter((d) => d.hourNum > currentHour),
+        ...rawData.filter((d) => d.hourNum <= currentHour),
+      ];
 
-  // X-axis ticks: every 3 positions in the reordered array
-  const xTicks = data.filter((_, i) => i % 3 === 0).map((d) => d.hour);
+  const xTicks = isLongPeriod
+    ? data.filter((d) => d.hourNum % 3 === 0).map((d) => d.hour)
+    : data.filter((_, i) => i % 3 === 0).map((d) => d.hour);
 
-  // Dimmed range: the first (24 − periodHours) entries are "outside" the window
-  const periodHours = PERIOD_HOURS[period];
+  // Dimmed range only for short periods < 24h
+  const periodHours = PERIOD_HOURS[period]; // undefined for 24h, 7d, 14d, 30d
   let dimRange: { x1: string; x2: string } | null = null;
-  if (periodHours !== undefined && data.length > periodHours) {
+  if (!isLongPeriod && periodHours !== undefined && data.length > periodHours) {
     const dimmEndIndex = data.length - periodHours - 1;
     if (dimmEndIndex >= 0) {
       dimRange = { x1: data[0].hour, x2: data[dimmEndIndex].hour };
@@ -179,7 +188,9 @@ export function DailyPatternChart() {
       <CardHeader className="pb-1">
         <CardTitle className="text-base flex items-center justify-between">
           <span>Padrão Diário (AGP)</span>
-          <span className="text-xs font-normal text-muted-foreground">últimas 24h</span>
+          {!isLongPeriod && (
+            <span className="text-xs font-normal text-muted-foreground">últimas 24h</span>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
