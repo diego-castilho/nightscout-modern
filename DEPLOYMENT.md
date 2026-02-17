@@ -1,19 +1,22 @@
-# 🚀 Nightscout Modern - Deployment Status
+# Nightscout Modern - Deployment
 
-## ✅ Sistema Rodando com Sucesso!
+## Status
 
-**Data de Deploy:** 16/02/2026 20:35 BRT
+**Última atualização:** 17/02/2026
 
-### 📍 Endereços
+### Endereços
 
 | Serviço | IP | URL | Status |
 |---------|-------|-----|--------|
-| **Backend API** | 10.0.0.229:3001 | http://10.0.0.229:3001/api | ✅ Healthy |
-| **Frontend Web** | 10.0.0.231 | http://10.0.0.231 | ✅ Running |
+| **Backend API** | 10.0.0.229:3001 | http://10.0.0.229:3001/api | Healthy |
+| **Frontend Web** | 10.0.0.231 | http://10.0.0.231 | Running |
+| **Acesso externo** | — | https://diabetes1.diegocastilho.me | Cloudflare Tunnel |
 
-### 🌐 Como Acessar
+---
 
-#### De outro dispositivo na rede (celular, tablet, outro computador):
+## Como Acessar
+
+### De outro dispositivo na rede (celular, tablet, outro computador):
 ```bash
 # Frontend (interface web)
 http://10.0.0.231
@@ -22,50 +25,68 @@ http://10.0.0.231
 http://10.0.0.229:3001/api/health
 ```
 
-#### Do próprio host Docker:
-⚠️ **Limitação do MacVLAN**: O host não consegue acessar diretamente containers na rede MacVLAN.
+### Do próprio host Docker:
+> **Limitação do MacVLAN**: O host não consegue acessar diretamente containers na rede MacVLAN.
 
-**Opções:**
+Opções:
 1. Acesse de outro dispositivo na mesma rede
-2. Use o Cloudflare Tunnel (já configurado)
+2. Use o acesso externo via Cloudflare Tunnel
 3. Teste via outro container: `docker exec nightscout-modern-backend wget -qO- http://10.0.0.231`
 
-### 🧪 Testes Rápidos
+---
+
+## Testes Rápidos
 
 ```bash
-# Testar backend API
+# Health check
 curl http://10.0.0.229:3001/api/health
 
-# Testar stats do banco de dados
+# Stats do banco de dados
 curl http://10.0.0.229:3001/api/stats
 
-# Testar última glicose
+# Última glicose
 curl http://10.0.0.229:3001/api/glucose/latest
+
+# Analytics das últimas 24h com thresholds customizados
+curl "http://10.0.0.229:3001/api/analytics?startDate=$(date -u -d '24 hours ago' +%FT%TZ)&endDate=$(date -u +%FT%TZ)&veryLow=54&low=70&high=180&veryHigh=250"
+
+# Configurações salvas
+curl http://10.0.0.229:3001/api/settings
 
 # Ver logs
 docker compose logs -f nightscout-modern-backend
 docker compose logs -f nightscout-modern-frontend
 ```
 
-### 📊 Endpoints Disponíveis
+---
 
-#### Health & Stats
-- `GET /api/health` - Health check
-- `GET /api/stats` - Database statistics
+## Endpoints Disponíveis
 
-#### Glucose
-- `GET /api/glucose` - Lista de glicemias
-- `GET /api/glucose/latest` - Última leitura
-- `GET /api/glucose/range?startDate=...&endDate=...` - Range de datas
+### Health & Stats
+- `GET /api/health` — Health check
+- `GET /api/stats` — Database statistics
 
-#### Analytics
-- `GET /api/analytics?startDate=...&endDate=...` - Análise completa
-- `GET /api/analytics/stats?startDate=...&endDate=...` - Estatísticas
-- `GET /api/analytics/tir?startDate=...&endDate=...` - Time in Range
-- `GET /api/analytics/patterns?startDate=...&endDate=...` - Padrões diários
-- `GET /api/analytics/detect?startDate=...&endDate=...` - Detecção de padrões
+### Glucose
+- `GET /api/glucose` — Lista de glicemias (`startDate`, `endDate`, `limit`)
+- `GET /api/glucose/latest` — Última leitura
+- `GET /api/glucose/range` — Range de datas
 
-### ⚙️ Gerenciamento
+### Analytics
+Todos aceitam `startDate`, `endDate` (ISO 8601) e opcionalmente `veryLow`, `low`, `high`, `veryHigh` (mg/dL):
+
+- `GET /api/analytics` — Análise completa (stats + TIR + padrões)
+- `GET /api/analytics/stats` — Estatísticas de glicose
+- `GET /api/analytics/tir` — Time in Range
+- `GET /api/analytics/patterns` — Padrões diários por hora (P5/P25/P75/P95)
+- `GET /api/analytics/detect` — Detecção de padrões glicêmicos
+
+### Configurações
+- `GET /api/settings` — Carregar configurações
+- `PUT /api/settings` — Salvar configurações (`unit`, `patientName`, `refreshInterval`, `alarmThresholds`)
+
+---
+
+## Gerenciamento
 
 ```bash
 # Ver status
@@ -83,59 +104,63 @@ docker compose down
 # Start
 docker compose up -d
 
-# Rebuild após mudanças
-docker compose build
-docker compose up -d --force-recreate
+# Rebuild após mudanças no frontend
+docker compose build nightscout-modern-frontend
+docker compose up -d --force-recreate nightscout-modern-frontend
+
+# Rebuild após mudanças no backend
+docker compose build nightscout-modern-backend
+docker compose up -d --force-recreate nightscout-modern-backend
+
+# Rebuild completo
+docker compose build && docker compose up -d --force-recreate
 ```
-
-### 🔧 Cloudflare Tunnel (Acesso Externo)
-
-Para acessar de qualquer lugar, adicione ao seu tunnel:
-
-```yaml
-ingress:
-  - hostname: nightscout-modern.diegocastilho.me
-    service: http://10.0.0.231
-
-  - hostname: nightscout-api.diegocastilho.me
-    service: http://10.0.0.229:3001
-```
-
-E atualize o CORS no backend (`.env`):
-```bash
-CORS_ORIGIN=http://10.0.0.231,https://nightscout-modern.diegocastilho.me
-```
-
-### ⚠️ Notas Importantes
-
-1. **MongoDB Change Streams**: Desabilitados porque o MongoDB não está em replica set. Updates em tempo real funcionarão via polling manual (refresh).
-
-2. **Acesso do Host**: Por limitação do MacVLAN, o host não consegue acessar diretamente os IPs 10.0.0.229 e 10.0.0.231. Acesse de outro dispositivo ou via Cloudflare Tunnel.
-
-3. **Segurança**: Certifique-se de configurar o `.env` com secrets seguros:
-   - `NIGHTSCOUT_API_SECRET`
-   - `NIGHTSCOUT_MODERN_JWT_SECRET`
-
-### 📱 PWA (Progressive Web App)
-
-O frontend é um PWA! Você pode instalar como app no celular:
-1. Acesse http://10.0.0.231 no celular
-2. Menu do navegador → "Adicionar à tela inicial"
-3. Use como app nativo!
-
-### 🎯 Próximas Features (Roadmap)
-
-- [ ] Gráficos interativos (Recharts)
-- [ ] Integração Claude AI (MCP)
-- [ ] Dark mode completo
-- [ ] Push notifications
-- [ ] Export PDF/Excel
-- [ ] AGP (Ambulatory Glucose Profile)
 
 ---
 
-**Stack:**
+## Cloudflare Tunnel (Acesso Externo)
+
+Configuração atual no tunnel:
+
+```yaml
+ingress:
+  - hostname: diabetes1.diegocastilho.me
+    service: http://10.0.0.231
+```
+
+Backend `.env`:
+```bash
+CORS_ORIGIN=http://10.0.0.231,https://diabetes1.diegocastilho.me
+```
+
+---
+
+## Notas Importantes
+
+1. **MongoDB Change Streams**: Desabilitados — MongoDB não está em replica set. Updates em tempo real funcionam via polling (auto-refresh configurável).
+
+2. **Acesso do Host**: Por limitação do MacVLAN, o host não acessa diretamente os IPs 10.0.0.229 e 10.0.0.231. Use outro dispositivo ou o Cloudflare Tunnel.
+
+3. **Configurações multi-dispositivo**: As configurações (thresholds, unidade, nome) são persistidas no MongoDB e compartilhadas entre todos os dispositivos que acessam o dashboard.
+
+4. **Segurança**: Secrets no `backend/.env`:
+   - `API_SECRET` — igual ao Nightscout API Secret
+   - `JWT_SECRET` — string aleatória longa
+
+---
+
+## PWA (Progressive Web App)
+
+O frontend é um PWA instalável no celular:
+1. Acesse http://10.0.0.231 (ou https://diabetes1.diegocastilho.me) no celular
+2. Menu do navegador → "Adicionar à tela inicial"
+3. Use como app nativo com cache offline
+
+---
+
+## Stack
+
 - Frontend: React 18 + TypeScript + Vite + Tailwind CSS + shadcn/ui
 - Backend: Node.js 20 + Express + TypeScript
-- Database: MongoDB (Nightscout existing)
-- Deploy: Docker + MacVLAN network
+- Database: MongoDB (Nightscout existente)
+- Deploy: Docker + MacVLAN + Cloudflare Tunnel

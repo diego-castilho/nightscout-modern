@@ -1,5 +1,7 @@
 # Guia de Setup — Nightscout Modern
 
+> **v0.4** — Dashboard completo com configurações, thresholds configuráveis, conversão de unidades e alertas visuais.
+
 ## Pré-requisitos
 
 - Docker e Docker Compose instalados
@@ -70,9 +72,14 @@ curl http://10.0.0.229:3001/api/health
 
 # Última leitura de glicose
 curl http://10.0.0.229:3001/api/glucose/latest
+
+# Configurações (unit, patientName, thresholds)
+curl http://10.0.0.229:3001/api/settings
 ```
 
 Acesse o frontend pelo browser: `http://10.0.0.231`
+
+As configurações (unidade, nome do paciente, thresholds) podem ser ajustadas na página **Configurações** do dashboard e são persistidas no MongoDB — compartilhadas entre todos os dispositivos.
 
 ---
 

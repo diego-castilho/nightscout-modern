@@ -2,7 +2,7 @@
 
 Interface moderna, responsiva e rica em recursos para monitoramento contínuo de glicose (CGM), construída sobre o banco de dados MongoDB do Nightscout existente.
 
-> **v0.2-beta** — Dashboard interativo completo com gráficos, dark mode e seletor de período.
+> **v0.4** — Dashboard completo com configurações, alertas visuais, conversão de unidades e thresholds configuráveis.
 
 ---
 
@@ -13,13 +13,14 @@ Interface moderna, responsiva e rica em recursos para monitoramento contínuo de
 **Backend**
 - Node.js 20 + Express + TypeScript
 - Acesso direto ao MongoDB do Nightscout (banco `test`)
-- API REST completa (glucose, analytics, patterns)
+- API REST completa (glucose, analytics, patterns, settings)
+- Persistência de configurações no servidor (compartilhada entre dispositivos)
 - Analytics engine:
   - Estatísticas: média, mediana, desvio padrão, mín/máx
   - GMI (Glucose Management Indicator)
   - Estimativa de HbA1c
   - Coeficiente de Variação (CV%)
-  - Time in Range — 5 faixas com metas internacionais (TIR/TAR/TBR)
+  - Time in Range — 5 faixas com thresholds configuráveis
   - Padrões diários por hora (P5/P25/P75/P95)
   - Detecção automática de padrões:
     - Fenômeno do alvorecer
@@ -33,23 +34,36 @@ Interface moderna, responsiva e rica em recursos para monitoramento contínuo de
 - PWA com Service Worker e cache offline
 - Dark mode persistido (toggle no header)
 - Seletor de período: 1h · 3h · 6h · 12h · 24h · 7d · 14d · 30d
-- Auto-refresh a cada 5 minutos
+- Auto-refresh configurável (1 · 2 · 5 · 10 · 15 · 30 min)
+- Suporte a mg/dL e mmol/L com conversão em tempo real
+- Página de configurações completa
+- Alertas visuais com cooldown de 15 min por zona
 
 **Gráficos**
 
 | Gráfico | Descrição |
 |---------|-----------|
-| **Leituras de Glicose** | AreaChart com gradiente dinâmico por zona TIR. Eixo X com ticks configurados por período. Tooltip com valor, seta de tendência e horário. |
-| **Tempo no Alvo (TIR)** | Barra horizontal empilhada + tabela com metas internacionais, tempo/dia real e indicadores ✓/✗. |
-| **Padrão Diário (AGP)** | Bandas de percentil P5–P25–P75–P95 + linha de mediana. Para ≤ 24h: timeline das últimas 24h com horas fora do período sombreadas. Para 7d+: padrão AGP clássico (00:00–23:00) com dados do período selecionado. |
-| **Cartão de Glicose Atual** | Valor em destaque (7xl) com cor por zona, seta de tendência, delta, badge de status e alerta de dados antigos. |
+| **Leituras de Glicose** | AreaChart com gradiente dinâmico por zona TIR. Eixo X com ticks configurados por período. Tooltip com valor, seta de tendência e horário. Linhas de referência nos thresholds configurados. |
+| **Tempo no Alvo (TIR)** | Barra horizontal empilhada + tabela com metas internacionais, tempo/dia real e indicadores ✓/✗. Cálculo usa thresholds configurados pelo usuário. |
+| **Padrão Diário (AGP)** | Bandas de percentil P5–P25–P75–P95 + linha de mediana. Para ≤ 24h: timeline das últimas 24h com horas fora do período sombreadas. Para 7d+: padrão AGP clássico (00:00–23:00) com dados do período selecionado. Linhas de referência dinâmicas. |
+| **Cartão de Glicose Atual** | Valor em destaque (7xl) com cor por zona, seta de tendência, delta, badge de status e alerta de dados antigos. Suporte a mg/dL e mmol/L. |
 | **Grid de Estatísticas** | 4 cards: Média · GMI · A1c Estimada · CV% com semáforo verde/amarelo/vermelho. |
 | **Alertas de Padrões** | Cards de alerta para padrões detectados com severidade (baixa/média/alta). |
+
+**Configurações**
+
+| Configuração | Descrição |
+|-------------|-----------|
+| Nome do paciente | Exibido no cabeçalho do dashboard |
+| Unidade de glicose | mg/dL ou mmol/L com conversão automática |
+| Auto-refresh | Intervalo configurável de 1 a 30 minutos |
+| Faixas limites | Thresholds de Muito Baixo / Baixo / Alto / Muito Alto (afeta todos os gráficos e alertas) |
+
+---
 
 ### Em Desenvolvimento 🚧
 
 - Alarmes sonoros / Push Notifications (PWA)
-- Página de configurações (targets, unidades, nome)
 - Relatório PDF estilo AGP
 - Comparação de períodos
 - Zoom/pan no gráfico de glicose
@@ -63,7 +77,7 @@ Interface moderna, responsiva e rica em recursos para monitoramento contínuo de
 ┌─────────────────────────────────────┐
 │  Frontend (React + TypeScript)      │
 │  - Dashboard em tempo real          │
-│  - 4 gráficos Recharts              │
+│  - Gráficos Recharts                │
 │  - PWA / Service Worker             │
 │  Nginx  →  http://10.0.0.231        │
 └────────────┬────────────────────────┘
@@ -72,6 +86,7 @@ Interface moderna, responsiva e rica em recursos para monitoramento contínuo de
 │  Backend (Node.js + Express)        │
 │  - API REST endpoints               │
 │  - Analytics engine                 │
+│  - Persistência de settings         │
 │  Node.js  →  http://10.0.0.229:3001 │
 └────────────┬────────────────────────┘
              │
@@ -81,6 +96,7 @@ Interface moderna, responsiva e rica em recursos para monitoramento contínuo de
 │  - entries (glucose readings)       │
 │  - treatments                       │
 │  - devicestatus                     │
+│  - nightscout_modern_settings       │
 └─────────────────────────────────────┘
 ```
 
@@ -147,6 +163,10 @@ GET /api/glucose/range   — Leituras em intervalo de datas
 ```
 
 ### Analytics
+
+Todos os endpoints aceitam `startDate` e `endDate` (ISO 8601).
+Os endpoints de analytics também aceitam thresholds opcionais: `veryLow`, `low`, `high`, `veryHigh` (mg/dL).
+
 ```
 GET /api/analytics               — Relatório completo (stats + TIR + padrões)
 GET /api/analytics/stats         — Estatísticas de glicose
@@ -155,22 +175,33 @@ GET /api/analytics/patterns      — Padrões diários por hora (P5/P25/P75/P95)
 GET /api/analytics/detect        — Detecção de padrões glicêmicos
 ```
 
-**Parâmetros:** todos os endpoints de analytics aceitam `startDate` e `endDate` (ISO 8601).
+### Configurações
+```
+GET /api/settings        — Carregar configurações salvas
+PUT /api/settings        — Salvar configurações (unit, patientName, refreshInterval, alarmThresholds)
+```
 
 ```bash
-# Exemplo: analytics das últimas 24h
-curl "http://10.0.0.229:3001/api/analytics?startDate=2025-01-01T00:00:00Z&endDate=2025-01-02T00:00:00Z"
+# Exemplo: analytics com thresholds customizados
+curl "http://10.0.0.229:3001/api/analytics?startDate=2025-01-01T00:00:00Z&endDate=2025-01-02T00:00:00Z&veryLow=60&low=80&high=160&veryHigh=240"
 
 # Última leitura
 curl http://10.0.0.229:3001/api/glucose/latest
+
+# Salvar configurações
+curl -X PUT http://10.0.0.229:3001/api/settings \
+  -H "Content-Type: application/json" \
+  -d '{"unit":"mmol","patientName":"Diego","refreshInterval":5}'
 ```
 
 ---
 
 ## Zonas TIR (Time in Range)
 
-| Zona | Faixa | Cor | Meta Internacional |
-|------|-------|-----|-------------------|
+Os limiares abaixo são os padrões internacionais. Todos são configuráveis na página de Configurações.
+
+| Zona | Faixa padrão | Cor | Meta Internacional |
+|------|-------------|-----|-------------------|
 | Muito Alto | > 250 mg/dL | Vermelho | < 5% |
 | Alto | 180–250 mg/dL | Âmbar | < 25% |
 | **Alvo** | **70–180 mg/dL** | **Verde** | **> 70%** |
@@ -229,18 +260,22 @@ curl http://10.0.0.229:3001/api/glucose/latest
 - Dark mode persistido
 - PWA / Service Worker
 - Detecção de padrões (alertas)
-- Auto-refresh a 5 min
+- Auto-refresh configurável
 
-### Fase 3 — Notificações (próximo)
-- Alarmes sonoros (hipo/hiper)
-- Push Notifications via PWA
-- Thresholds configuráveis
+### Fase 3 — Notificações ⚠️ (parcial)
+- Alertas visuais com banner (hipo/hiper) ✅
+- Thresholds configuráveis ✅
+- Alarmes sonoros / Push Notifications (pendente)
 
-### Fase 4 — Configurações
-- Página de settings (targets, unidades, perfil)
-- Suporte mmol/L
+### Fase 4 — Configurações ✅
+- Página de settings completa
+- Suporte mg/dL e mmol/L com conversão em tempo real
+- Thresholds configuráveis (afetam todos os gráficos e cálculos TIR)
+- Nome do paciente exibido no header
+- Intervalo de auto-refresh configurável
+- Persistência no servidor (compartilhado entre dispositivos)
 
-### Fase 5 — Relatórios
+### Fase 5 — Relatórios (próximo)
 - PDF estilo AGP
 - Resumo semanal
 - Export CSV
