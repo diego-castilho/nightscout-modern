@@ -2,12 +2,10 @@
 // DashboardPage - Main glucose monitoring dashboard
 // ============================================================================
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useGlucoseData } from '../hooks/useGlucoseData';
-import { useAlarm } from '../hooks/useAlarm';
 import { useDashboardStore, getPeriodDates } from '../stores/dashboardStore';
 import { detectPatterns } from '../lib/api';
-import { globalAudioAlarm } from '../lib/audioAlarm';
 import { formatGlucose, unitLabel } from '../lib/glucose';
 import type { DetectedPattern } from '../lib/api';
 
@@ -23,39 +21,44 @@ import { Button } from '../components/ui/button';
 import { AlertCircle, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 
+const COOLDOWN_MS = 15 * 60 * 1000; // 15 min between visual alerts per zone
+
 export function DashboardPage() {
-  const { period, lastRefresh, triggerRefresh, unit, alarmEnabled } = useDashboardStore();
+  const { period, lastRefresh, triggerRefresh, unit, alarmThresholds } = useDashboardStore();
   const { entries, latest, analytics, loading, error } = useGlucoseData();
   const [patterns, setPatterns] = useState<DetectedPattern[]>([]);
   const [patternsLoading, setPatternsLoading] = useState(true);
 
-  // Alarm banner state
+  // Visual alert banner state
   const [alarmBanner, setAlarmBanner] = useState<{ zone: string; sgv: number } | null>(null);
+  const lastAlertRef = useRef<{ zone: string; time: number } | null>(null);
+  const lastProcessedKey = useRef<string | null>(null);
 
-  // Auto-enable AudioContext on first user interaction (needed after page reload)
-  const audioListenerAttached = useRef(false);
+  // Detect threshold crossings and show banner (no audio)
   useEffect(() => {
-    if (!alarmEnabled || globalAudioAlarm.isEnabled() || audioListenerAttached.current) return;
-    audioListenerAttached.current = true;
+    if (!latest) return;
+    const { sgv } = latest;
+    const { veryLow, low, high, veryHigh } = alarmThresholds;
 
-    const enable = () => { globalAudioAlarm.enable(); };
-    document.addEventListener('click',      enable, { once: true });
-    document.addEventListener('keydown',    enable, { once: true });
-    document.addEventListener('touchstart', enable, { once: true });
+    const key = `${sgv}|${veryLow}-${low}-${high}-${veryHigh}`;
+    if (key === lastProcessedKey.current) return;
+    lastProcessedKey.current = key;
 
-    return () => {
-      document.removeEventListener('click',      enable);
-      document.removeEventListener('keydown',    enable);
-      document.removeEventListener('touchstart', enable);
-    };
-  }, [alarmEnabled]);
+    let zone: string | null = null;
+    if (sgv <= veryLow)       zone = 'urgentLow';
+    else if (sgv <= low)      zone = 'low';
+    else if (sgv >= veryHigh) zone = 'veryHigh';
+    else if (sgv >= high)     zone = 'high';
 
-  const handleAlarm = useCallback((zone: string, sgv: number) => {
+    if (!zone) return;
+
+    const now = Date.now();
+    if (lastAlertRef.current?.zone === zone && now - lastAlertRef.current.time < COOLDOWN_MS) return;
+
+    lastAlertRef.current = { zone, time: now };
     setAlarmBanner({ zone, sgv });
     setTimeout(() => setAlarmBanner(null), 2 * 60 * 1000);
-  }, []);
-
-  useAlarm(latest, handleAlarm);
+  }, [latest, alarmThresholds]);
 
   // Fetch detected patterns separately (can be slow)
   useEffect(() => {

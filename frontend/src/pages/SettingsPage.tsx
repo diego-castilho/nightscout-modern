@@ -12,10 +12,9 @@ import { saveSettings } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Switch } from '../components/ui/switch';
 import { Select } from '../components/ui/select';
 import { Button } from '../components/ui/button';
-import { User, Bell, RefreshCw, RotateCcw } from 'lucide-react';
+import { User, SlidersHorizontal, RefreshCw, RotateCcw } from 'lucide-react';
 
 const DEFAULT_THRESHOLDS_MGDL: AlarmThresholds = {
   veryLow: 54, low: 70, high: 180, veryHigh: 250,
@@ -35,7 +34,6 @@ export function SettingsPage() {
     unit, setUnit,
     patientName, setPatientName,
     refreshInterval, setRefreshInterval,
-    alarmEnabled, toggleAlarm,
     alarmThresholds, setAlarmThresholds,
   } = useDashboardStore();
 
@@ -123,7 +121,6 @@ export function SettingsPage() {
       unit,
       patientName:     newName,
       refreshInterval,
-      alarmEnabled,
       alarmThresholds: newThresholds,
     }).catch(() => { /* Server unreachable — localStorage still updated */ });
 
@@ -224,34 +221,19 @@ export function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* ============ ALARMES ============ */}
+        {/* ============ FAIXAS LIMITES ============ */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Bell className="h-4 w-4" />
-              Alarmes sonoros
+              <SlidersHorizontal className="h-4 w-4" />
+              Faixas Limites
             </CardTitle>
             <CardDescription>
-              Os limiares são comparados sempre em mg/dL internamente.
-              Aqui são exibidos em {ul}.
+              Define os limiares de glicose para as zonas de cor e alertas visuais.
+              Os valores são armazenados em mg/dL e exibidos aqui em {ul}.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
-            {/* Enable/disable */}
-            <div className="flex items-center justify-between">
-              <div>
-                <Label htmlFor="alarmEnabled">Habilitar alarmes</Label>
-                <p className="text-xs text-muted-foreground">
-                  Requer clicar no ícone de sino no cabeçalho para ativar o áudio.
-                </p>
-              </div>
-              <Switch
-                id="alarmEnabled"
-                checked={alarmEnabled}
-                onCheckedChange={() => toggleAlarm()}
-              />
-            </div>
-
             {/* Threshold inputs */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">

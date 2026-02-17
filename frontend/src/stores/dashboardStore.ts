@@ -24,7 +24,6 @@ interface DashboardState {
   period: Period;
   darkMode: boolean;
   lastRefresh: number;
-  alarmEnabled: boolean;
   alarmThresholds: AlarmThresholds;
   // Phase 4: user settings
   unit: GlucoseUnit;
@@ -33,7 +32,6 @@ interface DashboardState {
   setPeriod: (period: Period) => void;
   toggleDarkMode: () => void;
   triggerRefresh: () => void;
-  toggleAlarm: () => void;
   setAlarmThresholds: (t: AlarmThresholds) => void;
   setUnit: (unit: GlucoseUnit) => void;
   setPatientName: (name: string) => void;
@@ -47,7 +45,6 @@ export const useDashboardStore = create<DashboardState>()(
       period: '24h',
       darkMode: false,
       lastRefresh: Date.now(),
-      alarmEnabled: false,
       alarmThresholds: DEFAULT_THRESHOLDS,
       unit: 'mgdl',
       patientName: '',
@@ -68,8 +65,6 @@ export const useDashboardStore = create<DashboardState>()(
 
       triggerRefresh: () => set({ lastRefresh: Date.now() }),
 
-      toggleAlarm: () => set((state) => ({ alarmEnabled: !state.alarmEnabled })),
-
       setAlarmThresholds: (t) => set({ alarmThresholds: t }),
 
       setUnit: (unit) => set({ unit }),
@@ -82,7 +77,6 @@ export const useDashboardStore = create<DashboardState>()(
         unit:            settings.unit            ?? state.unit,
         patientName:     settings.patientName     ?? state.patientName,
         refreshInterval: settings.refreshInterval ?? state.refreshInterval,
-        alarmEnabled:    settings.alarmEnabled    ?? state.alarmEnabled,
         alarmThresholds: settings.alarmThresholds ?? state.alarmThresholds,
       })),
     }),
@@ -91,7 +85,6 @@ export const useDashboardStore = create<DashboardState>()(
       partialize: (state: DashboardState) => ({
         darkMode:        state.darkMode,
         period:          state.period,
-        alarmEnabled:    state.alarmEnabled,
         alarmThresholds: state.alarmThresholds,
         unit:            state.unit,
         patientName:     state.patientName,
