@@ -116,10 +116,7 @@ function App() {
               loading={loading}
               totalReadings={analytics?.totalReadings}
             />
-            <DailyPatternChart
-              patterns={analytics?.dailyPatterns ?? []}
-              loading={loading}
-            />
+            <DailyPatternChart />
           </div>
 
           {/* Detected patterns */}

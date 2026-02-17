@@ -1,11 +1,12 @@
 // ============================================================================
 // DailyPatternChart - AGP-style 24h pattern with percentile bands
-// Always shows the full 24h pattern regardless of selected period.
-// Bands: P5–P95 (outer, light) and P25–P75 (inner, darker)
-// Median line: 50th percentile (average)
-// When period ≤ 12h, hours outside the window are dimmed.
+// Always fetches and shows the last 24h, independent of the selected period.
+// X axis: continuous time from "now - 24h" → "now"
+//   e.g. if it's 14:00 → shows 15:00 (yesterday) … 0:00 … 13:00 … 14:00 (now)
+// When period ≤ 12h, hours before the selected window are dimmed.
 // ============================================================================
 
+import { useState, useEffect } from 'react';
 import {
   ComposedChart,
   Area,
@@ -20,24 +21,23 @@ import {
   Label,
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { getAnalytics } from '../../lib/api';
 import type { DailyPattern } from '../../lib/api';
 import { useDashboardStore, type Period } from '../../stores/dashboardStore';
 
-interface Props {
-  patterns: DailyPattern[];
-  loading: boolean;
-}
+// Period → hours in the active selection window (undefined = 24h+, no dimming)
+const PERIOD_HOURS: Partial<Record<Period, number>> = {
+  '1h': 1, '3h': 3, '6h': 6, '12h': 12,
+};
 
 interface ChartPoint {
-  hour: string;         // "00:00"
+  hour: string;       // "HH:00"
   hourNum: number;
   avg: number;
-  // Stacked layers (built from p5 up):
-  p5_base: number;           // invisible baseline at p5
-  outer_low: number;         // p25 - p5  → outer band (light), below IQR
-  inner: number;             // p75 - p25 → inner band (IQR, darker)
-  outer_high: number;        // p95 - p75 → outer band (light), above IQR
-  // Raw values for tooltip
+  p5_base: number;
+  outer_low: number;
+  inner: number;
+  outer_high: number;
   p5: number;
   p25: number;
   p75: number;
@@ -45,43 +45,8 @@ interface ChartPoint {
   count: number;
 }
 
-// Fixed Y axis ticks matching the reference image
 const Y_TICKS = [0, 54, 70, 180, 250, 350];
-
-// Period → number of hours in the selection window
-const PERIOD_HOURS: Partial<Record<Period, number>> = {
-  '1h': 1, '3h': 3, '6h': 6, '12h': 12,
-};
-
-// Returns the x-axis ranges (hour strings) that should be dimmed.
-// Dimmed = hours OUTSIDE the selected period window.
-function getDimmedRanges(period: Period): Array<{ x1: string; x2: string }> {
-  const hours = PERIOD_HOURS[period];
-  if (hours === undefined) return []; // 24h, 7d, etc. — all visible
-
-  const pad = (h: number) => `${String(h).padStart(2, '0')}:00`;
-  const currentHour = new Date().getHours();
-  const startHour = (currentHour - hours + 24) % 24;
-
-  if (startHour < currentHour) {
-    // No midnight wrap — selected: [startHour..currentHour]
-    // Dimmed: [0..startHour-1] and [currentHour+1..23]
-    const ranges: Array<{ x1: string; x2: string }> = [];
-    if (startHour > 0)      ranges.push({ x1: pad(0),              x2: pad(startHour - 1) });
-    if (currentHour < 23)   ranges.push({ x1: pad(currentHour + 1), x2: pad(23) });
-    return ranges;
-  }
-
-  if (startHour > currentHour) {
-    // Midnight wrap — selected: [startHour..23] and [0..currentHour]
-    // Dimmed: [currentHour+1..startHour-1]
-    if (currentHour + 1 <= startHour - 1) {
-      return [{ x1: pad(currentHour + 1), x2: pad(startHour - 1) }];
-    }
-  }
-
-  return [];
-}
+const pad = (h: number) => `${String(h).padStart(2, '0')}:00`;
 
 interface CustomTooltipProps {
   active?: boolean;
@@ -91,22 +56,51 @@ interface CustomTooltipProps {
 function CustomTooltip({ active, payload }: CustomTooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
   const d = payload[0].payload;
-
   return (
     <div className="bg-background border border-border rounded-lg shadow-lg p-3 text-xs min-w-[150px]">
       <p className="font-semibold text-sm mb-1.5">{d.hour}</p>
       <div className="space-y-0.5">
-        <p><span className="text-muted-foreground">Mediana:</span> <span className="font-bold text-green-600 dark:text-green-400">{d.avg} mg/dL</span></p>
-        <p><span className="text-muted-foreground">P25–P75:</span> {d.p25}–{d.p75} mg/dL</p>
-        <p><span className="text-muted-foreground">P5–P95:</span> {d.p5}–{d.p95} mg/dL</p>
+        <p>
+          <span className="text-muted-foreground">Mediana: </span>
+          <span className="font-bold text-green-600 dark:text-green-400">{d.avg} mg/dL</span>
+        </p>
+        <p><span className="text-muted-foreground">P25–P75: </span>{d.p25}–{d.p75} mg/dL</p>
+        <p><span className="text-muted-foreground">P5–P95: </span>{d.p5}–{d.p95} mg/dL</p>
         <p className="text-muted-foreground">{d.count} leituras</p>
       </div>
     </div>
   );
 }
 
-export function DailyPatternChart({ patterns, loading }: Props) {
-  const { period } = useDashboardStore();
+export function DailyPatternChart() {
+  const { period, lastRefresh } = useDashboardStore();
+  const [patterns, setPatterns] = useState<DailyPattern[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Always fetch the last 24h — independent of selected period
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+
+    const endDate   = new Date().toISOString();
+    const startDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    getAnalytics(startDate, endDate)
+      .then((data) => {
+        if (!cancelled) {
+          setPatterns(data?.dailyPatterns ?? []);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPatterns([]);
+          setLoading(false);
+        }
+      });
+
+    return () => { cancelled = true; };
+  }, [lastRefresh]); // refetch only on manual refresh
 
   if (loading) {
     return (
@@ -136,41 +130,57 @@ export function DailyPatternChart({ patterns, loading }: Props) {
     );
   }
 
-  const data: ChartPoint[] = patterns
+  const currentHour = new Date().getHours();
+
+  // Build raw data sorted 0–23
+  const rawData: ChartPoint[] = patterns
     .sort((a, b) => a.hour - b.hour)
     .map((p) => {
-      const p5  = p.p5  ?? Math.max(40, p.averageGlucose - Math.round(p.stdDev * 1.645));
-      const p25 = p.p25 ?? Math.max(p5, p.averageGlucose - Math.round(p.stdDev * 0.674));
+      const p5  = p.p5  ?? Math.max(40,  p.averageGlucose - Math.round(p.stdDev * 1.645));
+      const p25 = p.p25 ?? Math.max(p5,  p.averageGlucose - Math.round(p.stdDev * 0.674));
       const p75 = p.p75 ?? Math.min(400, p.averageGlucose + Math.round(p.stdDev * 0.674));
       const p95 = p.p95 ?? Math.min(400, p.averageGlucose + Math.round(p.stdDev * 1.645));
-
       return {
-        hour: `${String(p.hour).padStart(2, '0')}:00`,
-        hourNum: p.hour,
-        avg: p.averageGlucose,
-        // Stacked layers from p5 upward:
+        hour:       pad(p.hour),
+        hourNum:    p.hour,
+        avg:        p.averageGlucose,
         p5_base:    Math.max(0, p5),
         outer_low:  Math.max(0, p25 - p5),
         inner:      Math.max(0, p75 - p25),
         outer_high: Math.max(0, p95 - p75),
-        // Raw for tooltip:
         p5, p25, p75, p95,
         count: p.count,
       };
     });
 
-  // X-axis ticks every 3 hours
-  const xTicks = data
-    .filter((d) => d.hourNum % 3 === 0)
-    .map((d) => d.hour);
+  // Reorder to start from (currentHour + 1) → currentHour so that
+  // the left edge = "24h ago" and the right edge = "now".
+  // Example: currentHour=14 → [15,16,…,23, 0,1,…,14]
+  const data: ChartPoint[] = [
+    ...rawData.filter((d) => d.hourNum > currentHour),
+    ...rawData.filter((d) => d.hourNum <= currentHour),
+  ];
 
-  const dimmedRanges = getDimmedRanges(period);
-  const hasDimmed = dimmedRanges.length > 0;
+  // X-axis ticks: every 3 positions in the reordered array
+  const xTicks = data.filter((_, i) => i % 3 === 0).map((d) => d.hour);
+
+  // Dimmed range: the first (24 − periodHours) entries are "outside" the window
+  const periodHours = PERIOD_HOURS[period];
+  let dimRange: { x1: string; x2: string } | null = null;
+  if (periodHours !== undefined && data.length > periodHours) {
+    const dimmEndIndex = data.length - periodHours - 1;
+    if (dimmEndIndex >= 0) {
+      dimRange = { x1: data[0].hour, x2: data[dimmEndIndex].hour };
+    }
+  }
 
   return (
     <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">Padrão Diário (AGP)</CardTitle>
+      <CardHeader className="pb-1">
+        <CardTitle className="text-base flex items-center justify-between">
+          <span>Padrão Diário (AGP)</span>
+          <span className="text-xs font-normal text-muted-foreground">últimas 24h</span>
+        </CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
         <ResponsiveContainer width="100%" height={280}>
@@ -206,76 +216,22 @@ export function DailyPatternChart({ patterns, loading }: Props) {
 
             {/* Target range lines */}
             <ReferenceLine y={180} stroke="#22c55e" strokeWidth={1.5}>
-              <Label
-                value="180"
-                position="right"
-                fontSize={10}
-                fill="#22c55e"
-                offset={4}
-              />
+              <Label value="180" position="right" fontSize={10} fill="#22c55e" offset={4} />
             </ReferenceLine>
             <ReferenceLine y={70} stroke="#22c55e" strokeWidth={1.5}>
-              <Label
-                value="70"
-                position="right"
-                fontSize={10}
-                fill="#22c55e"
-                offset={4}
-              />
+              <Label value="70" position="right" fontSize={10} fill="#22c55e" offset={4} />
             </ReferenceLine>
             <ReferenceLine y={54} stroke="#f97316" strokeDasharray="3 3" strokeWidth={1}>
-              <Label
-                value="54"
-                position="right"
-                fontSize={10}
-                fill="#f97316"
-                offset={4}
-              />
+              <Label value="54" position="right" fontSize={10} fill="#f97316" offset={4} />
             </ReferenceLine>
 
             {/* ── Stacked percentile bands (bottom → top) ─────────────── */}
-            {/* Layer 1: invisible base from 0 to p5 */}
-            <Area
-              type="monotone"
-              dataKey="p5_base"
-              stackId="bands"
-              stroke="none"
-              fill="transparent"
-              isAnimationActive={false}
-              legendType="none"
-            />
-            {/* Layer 2: p5→p25 (outer band low, light green) */}
-            <Area
-              type="monotone"
-              dataKey="outer_low"
-              stackId="bands"
-              stroke="none"
-              fill="rgba(34, 197, 94, 0.15)"
-              isAnimationActive={false}
-              legendType="none"
-            />
-            {/* Layer 3: p25→p75 (IQR / inner band, darker green) */}
-            <Area
-              type="monotone"
-              dataKey="inner"
-              stackId="bands"
-              stroke="none"
-              fill="rgba(34, 197, 94, 0.35)"
-              isAnimationActive={false}
-              legendType="none"
-            />
-            {/* Layer 4: p75→p95 (outer band high, light green) */}
-            <Area
-              type="monotone"
-              dataKey="outer_high"
-              stackId="bands"
-              stroke="none"
-              fill="rgba(34, 197, 94, 0.15)"
-              isAnimationActive={false}
-              legendType="none"
-            />
+            <Area type="monotone" dataKey="p5_base"    stackId="bands" stroke="none" fill="transparent"           isAnimationActive={false} legendType="none" />
+            <Area type="monotone" dataKey="outer_low"  stackId="bands" stroke="none" fill="rgba(34,197,94,0.15)"  isAnimationActive={false} legendType="none" />
+            <Area type="monotone" dataKey="inner"      stackId="bands" stroke="none" fill="rgba(34,197,94,0.35)"  isAnimationActive={false} legendType="none" />
+            <Area type="monotone" dataKey="outer_high" stackId="bands" stroke="none" fill="rgba(34,197,94,0.15)"  isAnimationActive={false} legendType="none" />
 
-            {/* Median line (50th percentile / average) */}
+            {/* Median line */}
             <Line
               type="monotone"
               dataKey="avg"
@@ -288,18 +244,17 @@ export function DailyPatternChart({ patterns, loading }: Props) {
               legendType="none"
             />
 
-            {/* ── Dimmed overlay for hours outside selected period ──── */}
-            {dimmedRanges.map((r, i) => (
+            {/* Dim hours that fall outside the selected period */}
+            {dimRange && (
               <ReferenceArea
-                key={i}
-                x1={r.x1}
-                x2={r.x2}
+                x1={dimRange.x1}
+                x2={dimRange.x2}
                 fill="rgb(100,116,139)"
-                fillOpacity={0.18}
+                fillOpacity={0.2}
                 strokeOpacity={0}
                 isFront={true}
               />
-            ))}
+            )}
           </ComposedChart>
         </ResponsiveContainer>
 
@@ -317,9 +272,9 @@ export function DailyPatternChart({ patterns, loading }: Props) {
             <div className="w-4 h-3 rounded-sm" style={{ background: 'rgba(34,197,94,0.15)' }} />
             <span className="text-[10px] text-muted-foreground">P5–P95</span>
           </div>
-          {hasDimmed && (
+          {dimRange && (
             <div className="flex items-center gap-1.5">
-              <div className="w-4 h-3 rounded-sm" style={{ background: 'rgba(100,116,139,0.18)' }} />
+              <div className="w-4 h-3 rounded-sm" style={{ background: 'rgba(100,116,139,0.2)' }} />
               <span className="text-[10px] text-muted-foreground">Fora do período</span>
             </div>
           )}
