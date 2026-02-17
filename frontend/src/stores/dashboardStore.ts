@@ -4,14 +4,15 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { GlucoseUnit } from '../lib/glucose';
 
 export type Period = '1h' | '3h' | '6h' | '12h' | '24h' | '7d' | '14d' | '30d';
 
 export interface AlarmThresholds {
-  veryLow:  number;  // default 54
-  low:      number;  // default 70
-  high:     number;  // default 180
-  veryHigh: number;  // default 250
+  veryLow:  number;  // mg/dL, default 54
+  low:      number;  // mg/dL, default 70
+  high:     number;  // mg/dL, default 180
+  veryHigh: number;  // mg/dL, default 250
 }
 
 const DEFAULT_THRESHOLDS: AlarmThresholds = {
@@ -24,11 +25,18 @@ interface DashboardState {
   lastRefresh: number;
   alarmEnabled: boolean;
   alarmThresholds: AlarmThresholds;
+  // Phase 4: user settings
+  unit: GlucoseUnit;
+  patientName: string;
+  refreshInterval: number; // minutes
   setPeriod: (period: Period) => void;
   toggleDarkMode: () => void;
   triggerRefresh: () => void;
   toggleAlarm: () => void;
   setAlarmThresholds: (t: AlarmThresholds) => void;
+  setUnit: (unit: GlucoseUnit) => void;
+  setPatientName: (name: string) => void;
+  setRefreshInterval: (minutes: number) => void;
 }
 
 export const useDashboardStore = create<DashboardState>()(
@@ -39,6 +47,9 @@ export const useDashboardStore = create<DashboardState>()(
       lastRefresh: Date.now(),
       alarmEnabled: false,
       alarmThresholds: DEFAULT_THRESHOLDS,
+      unit: 'mgdl',
+      patientName: '',
+      refreshInterval: 5,
 
       setPeriod: (period) => set({ period }),
 
@@ -58,6 +69,12 @@ export const useDashboardStore = create<DashboardState>()(
       toggleAlarm: () => set((state) => ({ alarmEnabled: !state.alarmEnabled })),
 
       setAlarmThresholds: (t) => set({ alarmThresholds: t }),
+
+      setUnit: (unit) => set({ unit }),
+
+      setPatientName: (patientName) => set({ patientName }),
+
+      setRefreshInterval: (refreshInterval) => set({ refreshInterval }),
     }),
     {
       name: 'nightscout-dashboard',
@@ -66,6 +83,9 @@ export const useDashboardStore = create<DashboardState>()(
         period:          state.period,
         alarmEnabled:    state.alarmEnabled,
         alarmThresholds: state.alarmThresholds,
+        unit:            state.unit,
+        patientName:     state.patientName,
+        refreshInterval: state.refreshInterval,
       }),
     }
   )

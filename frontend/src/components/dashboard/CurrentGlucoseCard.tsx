@@ -3,7 +3,9 @@
 // ============================================================================
 
 import { Card, CardContent } from '../ui/card';
-import { formatGlucose, getTrendArrow, getTrendDescription, getGlucoseLevel } from '../../lib/utils';
+import { getTrendArrow, getTrendDescription, getGlucoseLevel } from '../../lib/utils';
+import { formatGlucose as fmtGlucose, unitLabel } from '../../lib/glucose';
+import { useDashboardStore } from '../../stores/dashboardStore';
 import type { GlucoseEntry } from '../../lib/api';
 
 interface Props {
@@ -45,6 +47,7 @@ const LEVEL_CONFIG = {
 };
 
 export function CurrentGlucoseCard({ latest, loading }: Props) {
+  const { unit } = useDashboardStore();
   if (loading) {
     return (
       <Card>
@@ -75,7 +78,12 @@ export function CurrentGlucoseCard({ latest, loading }: Props) {
   const trendArrow = getTrendArrow(latest.trend);
   const trendDesc = getTrendDescription(latest.trend);
   const deltaText = latest.delta !== undefined
-    ? `${latest.delta > 0 ? '+' : ''}${latest.delta.toFixed(1)} mg/dL`
+    ? (() => {
+        const d = unit === 'mmol'
+          ? (latest.delta / 18.01)
+          : latest.delta;
+        return `${d > 0 ? '+' : ''}${d.toFixed(unit === 'mmol' ? 2 : 1)} ${unitLabel(unit)}`;
+      })()
     : null;
 
   const ageMinutes = Math.floor((Date.now() - latest.date) / 60000);
@@ -96,9 +104,9 @@ export function CurrentGlucoseCard({ latest, loading }: Props) {
           {/* Center: main glucose value */}
           <div className="flex-1 text-center">
             <div className={`text-7xl font-bold tabular-nums tracking-tight ${config.textClass}`}>
-              {formatGlucose(latest.sgv)}
+              {fmtGlucose(latest.sgv, unit)}
             </div>
-            <div className="text-sm text-muted-foreground mt-1">mg/dL</div>
+            <div className="text-sm text-muted-foreground mt-1">{unitLabel(unit)}</div>
             <div className="mt-2">
               <span className={`text-xs font-semibold px-3 py-1 rounded-full ${config.badgeClass}`}>
                 {config.label}

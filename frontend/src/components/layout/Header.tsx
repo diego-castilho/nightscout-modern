@@ -2,7 +2,8 @@
 // Header - Top navigation bar
 // ============================================================================
 
-import { Moon, Sun, RefreshCw, Activity, Bell, BellOff } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Moon, Sun, RefreshCw, Activity, Bell, BellOff, Settings, ArrowLeft } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useTheme } from '../../hooks/useTheme';
 import { useDashboardStore } from '../../stores/dashboardStore';
@@ -14,12 +15,14 @@ interface HeaderProps {
 
 export function Header({ lastUpdated }: HeaderProps) {
   const { darkMode, toggleDarkMode } = useTheme();
-  const { triggerRefresh, alarmEnabled, toggleAlarm } = useDashboardStore();
+  const { triggerRefresh, alarmEnabled, toggleAlarm, patientName } = useDashboardStore();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isSettings = location.pathname === '/settings';
 
   function handleAlarmToggle() {
     const next = !alarmEnabled;
     if (next) {
-      // Must create AudioContext inside user gesture
       globalAudioAlarm.enable();
       globalAudioAlarm.playConfirmation();
     } else {
@@ -36,38 +39,56 @@ export function Header({ lastUpdated }: HeaderProps) {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto flex h-14 items-center justify-between px-4">
-        {/* Logo */}
+        {/* Logo / Back button */}
         <div className="flex items-center gap-2">
-          <Activity className="h-5 w-5 text-green-500" />
-          <span className="font-bold text-lg tracking-tight">Nightscout Modern</span>
+          {isSettings ? (
+            <Link to="/" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+              <ArrowLeft className="h-4 w-4" />
+              <span>Dashboard</span>
+            </Link>
+          ) : (
+            <>
+              <Activity className="h-5 w-5 text-green-500" />
+              <span className="font-bold text-lg tracking-tight">Nightscout Modern</span>
+              {patientName && (
+                <span className="hidden sm:inline text-sm text-muted-foreground">
+                  · {patientName}
+                </span>
+              )}
+            </>
+          )}
         </div>
 
         {/* Right side actions */}
         <div className="flex items-center gap-2">
-          {lastUpdated && (
+          {!isSettings && lastUpdated && (
             <span className="text-xs text-muted-foreground hidden sm:block">
               Atualizado às {formatLastUpdated(lastUpdated)}
             </span>
           )}
 
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => triggerRefresh()}
-            title="Atualizar dados"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </Button>
+          {!isSettings && (
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => triggerRefresh()}
+                title="Atualizar dados"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleAlarmToggle}
-            title={alarmEnabled ? 'Desativar alarme sonoro' : 'Ativar alarme sonoro'}
-            className={alarmEnabled ? 'text-green-500 dark:text-green-400' : ''}
-          >
-            {alarmEnabled ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
-          </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleAlarmToggle}
+                title={alarmEnabled ? 'Desativar alarme sonoro' : 'Ativar alarme sonoro'}
+                className={alarmEnabled ? 'text-green-500 dark:text-green-400' : ''}
+              >
+                {alarmEnabled ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+              </Button>
+            </>
+          )}
 
           <Button
             variant="ghost"
@@ -77,6 +98,12 @@ export function Header({ lastUpdated }: HeaderProps) {
           >
             {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
+
+          {!isSettings && (
+            <Button variant="ghost" size="icon" onClick={() => navigate('/settings')} title="Configurações">
+              <Settings className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </div>
     </header>

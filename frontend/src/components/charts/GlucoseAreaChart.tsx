@@ -21,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import type { GlucoseEntry } from '../../lib/api';
 import { useDashboardStore, type Period } from '../../stores/dashboardStore';
 import { getTrendArrow } from '../../lib/utils';
+import { formatGlucose, unitLabel, toDisplayUnit } from '../../lib/glucose';
 
 interface Props {
   entries: GlucoseEntry[];
@@ -107,7 +108,11 @@ interface CustomTooltipProps {
   payload?: Array<{ payload: ChartPoint }>;
 }
 
-function CustomTooltip({ active, payload }: CustomTooltipProps) {
+interface CustomTooltipWithUnitProps extends CustomTooltipProps {
+  unit: import('../../lib/glucose').GlucoseUnit;
+}
+
+function CustomTooltip({ active, payload, unit }: CustomTooltipWithUnitProps) {
   if (!active || !payload?.length) return null;
   const point = payload[0].payload;
   const color = zoneColor(point.sgv);
@@ -117,14 +122,14 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
         {format(new Date(point.time), 'dd/MM HH:mm', { locale: ptBR })}
       </p>
       <p className="font-bold text-base" style={{ color }}>
-        {point.sgv} mg/dL {getTrendArrow(point.trend)}
+        {formatGlucose(point.sgv, unit)} {unitLabel(unit)} {getTrendArrow(point.trend)}
       </p>
     </div>
   );
 }
 
 export function GlucoseAreaChart({ entries, loading }: Props) {
-  const { period } = useDashboardStore();
+  const { period, unit } = useDashboardStore();
 
   if (loading) {
     return (
@@ -219,10 +224,11 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
               domain={[minVal, maxVal]}
               tick={{ fontSize: 11, fill: 'currentColor' }}
               className="text-muted-foreground"
-              width={40}
+              width={unit === 'mmol' ? 44 : 40}
+              tickFormatter={(v: number) => formatGlucose(v, unit)}
             />
 
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip unit={unit} />} />
 
             {/* TIR zone reference lines */}
             {refLines.map((r) => (
@@ -233,7 +239,7 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
                 strokeDasharray={r.dash}
                 strokeWidth={1.5}
                 label={{
-                  value: r.label,
+                  value: `${toDisplayUnit(r.y, unit)}`,
                   position: r.y >= 180 ? 'insideTopRight' : 'insideBottomRight',
                   fontSize: 10,
                   fill: r.color,

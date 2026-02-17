@@ -16,7 +16,7 @@ interface GlucoseDataState {
 }
 
 export function useGlucoseData() {
-  const { period, lastRefresh } = useDashboardStore();
+  const { period, lastRefresh, refreshInterval } = useDashboardStore();
   const [state, setState] = useState<GlucoseDataState>({
     entries: [],
     latest: null,
@@ -61,14 +61,14 @@ export function useGlucoseData() {
 
     fetchData();
 
-    // Auto-refresh every 5 minutes
-    const interval = setInterval(fetchData, 5 * 60 * 1000);
+    // Auto-refresh at the configured interval
+    const interval = setInterval(fetchData, refreshInterval * 60 * 1000);
 
     return () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [period, lastRefresh]);
+  }, [period, lastRefresh, refreshInterval]);
 
   return state;
 }

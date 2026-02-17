@@ -3,6 +3,8 @@
 // ============================================================================
 
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { formatGlucose, unitLabel } from '../../lib/glucose';
+import { useDashboardStore } from '../../stores/dashboardStore';
 import type { GlucoseAnalytics } from '../../lib/api';
 
 interface Props {
@@ -58,6 +60,7 @@ export function StatsGrid({ analytics, loading }: Props) {
     );
   }
 
+  const { unit } = useDashboardStore();
   const { stats, period } = analytics;
 
   // CV% status: good <36%, warning 36-50%, bad >50%
@@ -77,8 +80,8 @@ export function StatsGrid({ analytics, loading }: Props) {
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       <StatCard
         title="Média"
-        value={`${stats.average.toFixed(0)} mg/dL`}
-        subtitle={`Mediana: ${stats.median.toFixed(0)} mg/dL`}
+        value={`${formatGlucose(stats.average, unit)} ${unitLabel(unit)}`}
+        subtitle={`Mediana: ${formatGlucose(stats.median, unit)} ${unitLabel(unit)}`}
         status={avgStatus}
       />
       <StatCard

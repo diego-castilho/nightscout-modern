@@ -3,6 +3,8 @@
 // ============================================================================
 
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { toDisplayUnit, unitLabel } from '../../lib/glucose';
+import { useDashboardStore } from '../../stores/dashboardStore';
 import type { TimeInRange } from '../../lib/api';
 
 interface Props {
@@ -14,7 +16,9 @@ interface Props {
 
 interface RangeRow {
   label: string;
-  range: string;
+  range: string;           // template with {ul} placeholder
+  thresholdLow?: number;   // mg/dL
+  thresholdHigh?: number;  // mg/dL
   targetLabel: string;
   targetPct: number;
   targetOp: '>=' | '<=';
@@ -28,7 +32,8 @@ interface RangeRow {
 const RANGES: RangeRow[] = [
   {
     label: 'Muito Alto',
-    range: '>250 mg/dL',
+    range: '>250',
+    thresholdLow: 250,
     targetLabel: 'Menor que 5%',
     targetPct: 5,
     targetOp: '<=',
@@ -40,7 +45,8 @@ const RANGES: RangeRow[] = [
   },
   {
     label: 'Alto',
-    range: '180–250 mg/dL',
+    range: '180–250',
+    thresholdLow: 180, thresholdHigh: 250,
     targetLabel: 'Menor que 25%',
     targetPct: 25,
     targetOp: '<=',
@@ -52,7 +58,8 @@ const RANGES: RangeRow[] = [
   },
   {
     label: 'Alvo',
-    range: '70–180 mg/dL',
+    range: '70–180',
+    thresholdLow: 70, thresholdHigh: 180,
     targetLabel: 'Maior que 70%',
     targetPct: 70,
     targetOp: '>=',
@@ -64,7 +71,8 @@ const RANGES: RangeRow[] = [
   },
   {
     label: 'Baixo',
-    range: '54–70 mg/dL',
+    range: '54–70',
+    thresholdLow: 54, thresholdHigh: 70,
     targetLabel: 'Menor que 4%',
     targetPct: 4,
     targetOp: '<=',
@@ -76,7 +84,8 @@ const RANGES: RangeRow[] = [
   },
   {
     label: 'Muito Baixo',
-    range: '<54 mg/dL',
+    range: '<54',
+    thresholdHigh: 54,
     targetLabel: 'Menor que 1%',
     targetPct: 1,
     targetOp: '<=',
@@ -101,7 +110,21 @@ function isTargetMet(pct: number, targetPct: number, op: '>=' | '<='): boolean {
   return op === '>=' ? pct >= targetPct : pct <= targetPct;
 }
 
+function rangeLabel(seg: RangeRow, ul: string): string {
+  const fmt = (v: number, u: typeof ul) =>
+    u === 'mmol/L' ? toDisplayUnit(v, 'mmol').toString() : v.toString();
+  if (seg.thresholdLow && seg.thresholdHigh)
+    return `${fmt(seg.thresholdLow, ul)}–${fmt(seg.thresholdHigh, ul)} ${ul}`;
+  if (seg.thresholdLow)
+    return `>${fmt(seg.thresholdLow, ul)} ${ul}`;
+  if (seg.thresholdHigh)
+    return `<${fmt(seg.thresholdHigh, ul)} ${ul}`;
+  return `${seg.range} ${ul}`;
+}
+
 export function TIRChart({ tir, loading, totalReadings }: Props) {
+  const { unit } = useDashboardStore();
+  const ul = unitLabel(unit);
   if (loading) {
     return (
       <Card>
@@ -189,7 +212,7 @@ export function TIRChart({ tir, loading, totalReadings }: Props) {
                   <td className="py-1 pr-2">
                     <div className="flex items-center gap-1.5">
                       <div className="w-2 h-2 rounded-sm flex-shrink-0" style={{ backgroundColor: seg.color }} />
-                      <span className="font-medium whitespace-nowrap">{seg.range}</span>
+                      <span className="font-medium whitespace-nowrap">{rangeLabel(seg, ul)}</span>
                     </div>
                   </td>
                   <td className="py-1 pr-2 text-right text-muted-foreground whitespace-nowrap">
