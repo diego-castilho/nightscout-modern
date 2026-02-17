@@ -173,12 +173,7 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base flex items-center justify-between">
-          <span>Leituras de Glicose</span>
-          <span className="text-xs font-normal text-muted-foreground">
-            {entries.length} leituras
-          </span>
-        </CardTitle>
+        <CardTitle className="text-base">Leituras de Glicose</CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
         <ResponsiveContainer width="100%" height={280}>

@@ -90,11 +90,14 @@ function App() {
           {/* Period selector */}
           <div className="flex items-center justify-between flex-wrap gap-2">
             <PeriodSelector />
-            {analytics && (
-              <p className="text-xs text-muted-foreground">
-                {analytics.totalReadings} leituras · {analytics.period.days} dias
-              </p>
-            )}
+            <p className="text-xs text-muted-foreground">
+              {analytics ? `${analytics.totalReadings} leituras · ${analytics.period.days} dias` : ''}
+              {lastUpdated && (
+                <span className="ml-2">
+                  · atualizado às {lastUpdated.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+            </p>
           </div>
 
           {/* Current glucose - prominent */}

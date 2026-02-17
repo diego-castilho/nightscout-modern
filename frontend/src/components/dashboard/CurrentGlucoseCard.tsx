@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { Card, CardContent } from '../ui/card';
-import { formatGlucose, getTrendArrow, getTrendDescription, getGlucoseLevel, timeAgo } from '../../lib/utils';
+import { formatGlucose, getTrendArrow, getTrendDescription, getGlucoseLevel } from '../../lib/utils';
 import type { GlucoseEntry } from '../../lib/api';
 
 interface Props {
@@ -78,8 +78,7 @@ export function CurrentGlucoseCard({ latest, loading }: Props) {
     ? `${latest.delta > 0 ? '+' : ''}${latest.delta.toFixed(1)} mg/dL`
     : null;
 
-  const readingAge = new Date(latest.date);
-  const ageMinutes = Math.floor((Date.now() - readingAge.getTime()) / 60000);
+  const ageMinutes = Math.floor((Date.now() - latest.date) / 60000);
   const isStale = ageMinutes > 15;
 
   return (
@@ -87,14 +86,11 @@ export function CurrentGlucoseCard({ latest, loading }: Props) {
       <CardContent className="pt-6 pb-6">
         <div className="flex items-center justify-between gap-4">
 
-          {/* Left: timestamp + device */}
-          <div className="text-left min-w-[80px]">
-            <p className={`text-xs font-medium ${isStale ? 'text-red-500' : 'text-muted-foreground'}`}>
-              {isStale ? '⚠️ Dados antigos' : timeAgo(readingAge)}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {latest.device ? latest.device.split(' ')[0] : 'CGM'}
-            </p>
+          {/* Left: stale warning or empty spacer */}
+          <div className="min-w-[80px]">
+            {isStale && (
+              <p className="text-xs font-medium text-red-500">⚠️ Dados antigos</p>
+            )}
           </div>
 
           {/* Center: main glucose value */}

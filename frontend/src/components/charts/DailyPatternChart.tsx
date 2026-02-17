@@ -1,7 +1,8 @@
 // ============================================================================
-// DailyPatternChart - 24h hourly pattern with percentile bands
-// Always shows full 24h pattern regardless of selected period.
-// Hours that haven't occurred yet today are shown in a lighter shade.
+// DailyPatternChart - AGP-style 24h pattern with percentile bands
+// Always shows the full 24h pattern regardless of selected period.
+// Bands: P5–P95 (outer, light) and P25–P75 (inner, darker)
+// Median line: 50th percentile (average)
 // ============================================================================
 
 import {
@@ -14,6 +15,7 @@ import {
   Tooltip,
   ReferenceLine,
   ResponsiveContainer,
+  Label,
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import type { DailyPattern } from '../../lib/api';
@@ -24,16 +26,24 @@ interface Props {
 }
 
 interface ChartPoint {
-  hour: string;
+  hour: string;         // "00:00"
   hourNum: number;
   avg: number;
+  // Stacked layers (built from p5 up):
+  p5_base: number;           // invisible baseline at p5
+  outer_low: number;         // p25 - p5  → outer band (light), below IQR
+  inner: number;             // p75 - p25 → inner band (IQR, darker)
+  outer_high: number;        // p95 - p75 → outer band (light), above IQR
+  // Raw values for tooltip
+  p5: number;
   p25: number;
   p75: number;
-  p5: number;
   p95: number;
   count: number;
-  isPast: boolean; // has this hour already happened today?
 }
+
+// Fixed Y axis ticks matching the reference image
+const Y_TICKS = [0, 54, 70, 180, 250, 350];
 
 interface CustomTooltipProps {
   active?: boolean;
@@ -42,28 +52,17 @@ interface CustomTooltipProps {
 
 function CustomTooltip({ active, payload }: CustomTooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
-
-  const point = payload[0].payload;
+  const d = payload[0].payload;
 
   return (
-    <div className="bg-background border border-border rounded-lg shadow-lg p-3 text-sm min-w-[160px]">
-      <p className="font-semibold mb-2">{point.hour} {point.isPast ? '(hoje)' : '(histórico)'}</p>
-      <div className="space-y-0.5 text-xs">
-        <p className="text-green-500 font-bold">Média: {point.avg} mg/dL</p>
-        <p className="text-blue-400">P75: {point.p75} · P25: {point.p25}</p>
-        <p className="text-slate-400">P95: {point.p95} · P5: {point.p5}</p>
-        <p className="text-muted-foreground">{point.count} leituras</p>
+    <div className="bg-background border border-border rounded-lg shadow-lg p-3 text-xs min-w-[150px]">
+      <p className="font-semibold text-sm mb-1.5">{d.hour}</p>
+      <div className="space-y-0.5">
+        <p><span className="text-muted-foreground">Mediana:</span> <span className="font-bold text-green-600 dark:text-green-400">{d.avg} mg/dL</span></p>
+        <p><span className="text-muted-foreground">P25–P75:</span> {d.p25}–{d.p75} mg/dL</p>
+        <p><span className="text-muted-foreground">P5–P95:</span> {d.p5}–{d.p95} mg/dL</p>
+        <p className="text-muted-foreground">{d.count} leituras</p>
       </div>
-    </div>
-  );
-}
-
-// Legend item component
-function LegendItem({ color, label, opacity = 1 }: { color: string; label: string; opacity?: number }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: color, opacity }} />
-      <span className="text-[10px] text-muted-foreground">{label}</span>
     </div>
   );
 }
@@ -73,7 +72,7 @@ export function DailyPatternChart({ patterns, loading }: Props) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Padrão Diário (24h)</CardTitle>
+          <CardTitle className="text-base">Padrão Diário (AGP)</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="h-64 bg-muted animate-pulse rounded-md" />
@@ -86,164 +85,183 @@ export function DailyPatternChart({ patterns, loading }: Props) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Padrão Diário (24h)</CardTitle>
+          <CardTitle className="text-base">Padrão Diário (AGP)</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="h-64 flex items-center justify-center text-muted-foreground">
-            Sem dados suficientes para o padrão diário
+            Sem dados suficientes
           </div>
         </CardContent>
       </Card>
     );
   }
 
-  const currentHour = new Date().getHours();
-
   const data: ChartPoint[] = patterns
     .sort((a, b) => a.hour - b.hour)
-    .map((p) => ({
-      hour: `${String(p.hour).padStart(2, '0')}h`,
-      hourNum: p.hour,
-      avg: p.averageGlucose,
-      p25: p.p25 ?? Math.max(40, p.averageGlucose - Math.round(p.stdDev * 0.674)),
-      p75: p.p75 ?? Math.min(400, p.averageGlucose + Math.round(p.stdDev * 0.674)),
-      p5: p.p5 ?? Math.max(40, p.averageGlucose - Math.round(p.stdDev * 1.645)),
-      p95: p.p95 ?? Math.min(400, p.averageGlucose + Math.round(p.stdDev * 1.645)),
-      count: p.count,
-      isPast: p.hour <= currentHour,
-    }));
+    .map((p) => {
+      const p5  = p.p5  ?? Math.max(40, p.averageGlucose - Math.round(p.stdDev * 1.645));
+      const p25 = p.p25 ?? Math.max(p5, p.averageGlucose - Math.round(p.stdDev * 0.674));
+      const p75 = p.p75 ?? Math.min(400, p.averageGlucose + Math.round(p.stdDev * 0.674));
+      const p95 = p.p95 ?? Math.min(400, p.averageGlucose + Math.round(p.stdDev * 1.645));
 
-  const allValues = data.flatMap((d) => [d.p95, d.p5]).filter((v) => v > 0);
-  const minVal = Math.max(40, Math.min(...allValues) - 10);
-  const maxVal = Math.min(400, Math.max(...allValues) + 10);
+      return {
+        hour: `${String(p.hour).padStart(2, '0')}:00`,
+        hourNum: p.hour,
+        avg: p.averageGlucose,
+        // Stacked layers from p5 upward:
+        p5_base:    Math.max(0, p5),
+        outer_low:  Math.max(0, p25 - p5),
+        inner:      Math.max(0, p75 - p25),
+        outer_high: Math.max(0, p95 - p75),
+        // Raw for tooltip:
+        p5, p25, p75, p95,
+        count: p.count,
+      };
+    });
+
+  // X-axis ticks every 3 hours
+  const xTicks = data
+    .filter((d) => d.hourNum % 3 === 0)
+    .map((d) => d.hour);
 
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base flex items-center justify-between">
-          <span>Padrão Diário (24h)</span>
-          <span className="text-xs font-normal text-muted-foreground">
-            horas passadas / históricas
-          </span>
-        </CardTitle>
+        <CardTitle className="text-base">Padrão Diário (AGP)</CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
-        <ResponsiveContainer width="100%" height={240}>
-          <ComposedChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-            <defs>
-              {/* IQR band (P25-P75) - today hours */}
-              <linearGradient id="iqrBandToday" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#22c55e" stopOpacity={0.35} />
-                <stop offset="100%" stopColor="#22c55e" stopOpacity={0.15} />
-              </linearGradient>
-              {/* Wide band (P5-P95) - today hours */}
-              <linearGradient id="wideBandToday" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#22c55e" stopOpacity={0.12} />
-                <stop offset="100%" stopColor="#22c55e" stopOpacity={0.04} />
-              </linearGradient>
-              {/* IQR band (P25-P75) - historical hours */}
-              <linearGradient id="iqrBandHist" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.25} />
-                <stop offset="100%" stopColor="#94a3b8" stopOpacity={0.1} />
-              </linearGradient>
-              {/* Wide band (P5-P95) - historical hours */}
-              <linearGradient id="wideBandHist" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.1} />
-                <stop offset="100%" stopColor="#94a3b8" stopOpacity={0.03} />
-              </linearGradient>
-            </defs>
-
+        <ResponsiveContainer width="100%" height={280}>
+          <ComposedChart
+            data={data}
+            margin={{ top: 10, right: 48, left: -10, bottom: 0 }}
+          >
             <CartesianGrid
               strokeDasharray="3 3"
               stroke="currentColor"
               className="text-border"
-              opacity={0.3}
+              opacity={0.25}
+              vertical={true}
+              horizontal={false}
             />
 
             <XAxis
               dataKey="hour"
-              tick={{ fontSize: 10, fill: 'currentColor' }}
+              ticks={xTicks}
+              tick={{ fontSize: 11, fill: 'currentColor' }}
               className="text-muted-foreground"
-              interval={2}
             />
 
             <YAxis
-              domain={[minVal, maxVal]}
-              tick={{ fontSize: 10, fill: 'currentColor' }}
+              ticks={Y_TICKS}
+              domain={[0, 350]}
+              tick={{ fontSize: 11, fill: 'currentColor' }}
               className="text-muted-foreground"
               width={35}
             />
 
             <Tooltip content={<CustomTooltip />} />
 
-            <ReferenceLine y={180} stroke="#f59e0b" strokeDasharray="4 4" strokeWidth={1} />
-            <ReferenceLine y={70} stroke="#f59e0b" strokeDasharray="4 4" strokeWidth={1} />
+            {/* Target range lines */}
+            <ReferenceLine y={180} stroke="#22c55e" strokeWidth={1.5}>
+              <Label
+                value="180"
+                position="right"
+                fontSize={10}
+                fill="#22c55e"
+                offset={4}
+              />
+            </ReferenceLine>
+            <ReferenceLine y={70} stroke="#22c55e" strokeWidth={1.5}>
+              <Label
+                value="70"
+                position="right"
+                fontSize={10}
+                fill="#22c55e"
+                offset={4}
+              />
+            </ReferenceLine>
+            <ReferenceLine y={54} stroke="#f97316" strokeDasharray="3 3" strokeWidth={1}>
+              <Label
+                value="54"
+                position="right"
+                fontSize={10}
+                fill="#f97316"
+                offset={4}
+              />
+            </ReferenceLine>
 
-            {/* Vertical line at current hour */}
-            <ReferenceLine
-              x={`${String(currentHour).padStart(2, '0')}h`}
-              stroke="#6366f1"
-              strokeDasharray="3 3"
-              strokeWidth={1.5}
-              label={{ value: 'agora', position: 'insideTopLeft', fontSize: 9, fill: '#6366f1' }}
-            />
-
-            {/* P5-P95 wide band */}
+            {/* ── Stacked percentile bands (bottom → top) ─────────────── */}
+            {/* Layer 1: invisible base from 0 to p5 */}
             <Area
               type="monotone"
-              dataKey="p95"
-              stroke="none"
-              fill="url(#wideBandToday)"
-              isAnimationActive={false}
-            />
-            <Area
-              type="monotone"
-              dataKey="p5"
-              stroke="none"
-              fill="transparent"
-              isAnimationActive={false}
-            />
-
-            {/* P25-P75 IQR band */}
-            <Area
-              type="monotone"
-              dataKey="p75"
-              stroke="none"
-              fill="url(#iqrBandToday)"
-              isAnimationActive={false}
-            />
-            <Area
-              type="monotone"
-              dataKey="p25"
+              dataKey="p5_base"
+              stackId="bands"
               stroke="none"
               fill="transparent"
               isAnimationActive={false}
+              legendType="none"
+            />
+            {/* Layer 2: p5→p25 (outer band low, light green) */}
+            <Area
+              type="monotone"
+              dataKey="outer_low"
+              stackId="bands"
+              stroke="none"
+              fill="rgba(34, 197, 94, 0.15)"
+              isAnimationActive={false}
+              legendType="none"
+            />
+            {/* Layer 3: p25→p75 (IQR / inner band, darker green) */}
+            <Area
+              type="monotone"
+              dataKey="inner"
+              stackId="bands"
+              stroke="none"
+              fill="rgba(34, 197, 94, 0.35)"
+              isAnimationActive={false}
+              legendType="none"
+            />
+            {/* Layer 4: p75→p95 (outer band high, light green) */}
+            <Area
+              type="monotone"
+              dataKey="outer_high"
+              stackId="bands"
+              stroke="none"
+              fill="rgba(34, 197, 94, 0.15)"
+              isAnimationActive={false}
+              legendType="none"
             />
 
-            {/* Average line - color varies by past/future */}
+            {/* Median line (50th percentile / average) */}
             <Line
               type="monotone"
               dataKey="avg"
+              stroke="#16a34a"
               strokeWidth={2.5}
               dot={false}
-              activeDot={{ r: 4 }}
+              activeDot={{ r: 4, fill: '#16a34a' }}
               isAnimationActive={true}
               animationDuration={600}
-              stroke="#22c55e"
+              legendType="none"
             />
           </ComposedChart>
         </ResponsiveContainer>
 
         {/* Legend */}
-        <div className="flex gap-4 mt-2 flex-wrap">
-          <LegendItem color="#22c55e" label="Média" />
-          <LegendItem color="#22c55e" label="P25–P75 (50% das leituras)" opacity={0.4} />
-          <LegendItem color="#22c55e" label="P5–P95 (90% das leituras)" opacity={0.2} />
-          <LegendItem color="#6366f1" label="Hora atual" />
+        <div className="flex gap-4 mt-1 flex-wrap justify-end">
+          <div className="flex items-center gap-1.5">
+            <div className="w-8 h-0.5 bg-green-700 dark:bg-green-500" />
+            <span className="text-[10px] text-muted-foreground">Mediana (50%)</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-4 h-3 rounded-sm" style={{ background: 'rgba(34,197,94,0.35)' }} />
+            <span className="text-[10px] text-muted-foreground">P25–P75</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-4 h-3 rounded-sm" style={{ background: 'rgba(34,197,94,0.15)' }} />
+            <span className="text-[10px] text-muted-foreground">P5–P95</span>
+          </div>
         </div>
-        <p className="text-[10px] text-muted-foreground mt-1">
-          Horas antes de "{String(currentHour).padStart(2, '0')}h" = hoje · horas após = históricas dos dias anteriores
-        </p>
       </CardContent>
     </Card>
   );

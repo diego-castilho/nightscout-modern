@@ -165,61 +165,47 @@ export function TIRChart({ tir, loading, totalReadings }: Props) {
         </div>
 
         {/* International targets table */}
-        <div className="text-xs">
-          {/* Header */}
-          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 gap-y-0 pb-1 mb-1 border-b border-border font-medium text-muted-foreground">
-            <span>Faixa de Glicose</span>
-            <span className="text-right">Meta</span>
-            <span className="text-right">Real</span>
-            <span className="text-right">Tempo/dia</span>
-          </div>
-
-          {/* Rows */}
-          <div className="space-y-1">
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr className="border-b border-border text-muted-foreground">
+              <th className="text-left font-medium pb-1 pr-2">Faixa</th>
+              <th className="text-right font-medium pb-1 pr-2 whitespace-nowrap">Meta (tempo/dia)</th>
+              <th className="text-right font-medium pb-1 pr-2 whitespace-nowrap">Real</th>
+              <th className="text-right font-medium pb-1 whitespace-nowrap">Tempo/dia</th>
+            </tr>
+          </thead>
+          <tbody>
             {RANGES.map((seg) => {
               const actualPct = tir[seg.percentKey] as number;
               const met = isTargetMet(actualPct, seg.targetPct, seg.targetOp);
               const actualTime = pctToTime(actualPct);
               const targetTime = pctToTime(seg.targetPct);
+              const metClass = met
+                ? 'text-green-600 dark:text-green-400'
+                : 'text-red-500 dark:text-red-400';
 
               return (
-                <div
-                  key={seg.label}
-                  className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 items-center py-0.5"
-                >
-                  {/* Range label + color dot */}
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <div
-                      className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
-                      style={{ backgroundColor: seg.color }}
-                    />
-                    <div className="min-w-0">
-                      <p className="font-medium truncate">{seg.range}</p>
+                <tr key={seg.label} className="border-b border-border/30 last:border-0">
+                  <td className="py-1 pr-2">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-sm flex-shrink-0" style={{ backgroundColor: seg.color }} />
+                      <span className="font-medium whitespace-nowrap">{seg.range}</span>
                     </div>
-                  </div>
-
-                  {/* Target */}
-                  <span className="text-muted-foreground text-right whitespace-nowrap">
-                    {seg.targetOp === '>=' ? '>' : '<'}{seg.targetPct}%
-                    <br />
-                    <span className="text-[10px]">({targetTime})</span>
-                  </span>
-
-                  {/* Actual % */}
-                  <span className={`font-bold text-right whitespace-nowrap ${met ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+                  </td>
+                  <td className="py-1 pr-2 text-right text-muted-foreground whitespace-nowrap">
+                    {seg.targetOp === '>=' ? '>' : '<'}{seg.targetPct}% ({targetTime})
+                  </td>
+                  <td className={`py-1 pr-2 text-right font-bold whitespace-nowrap ${metClass}`}>
                     {actualPct.toFixed(1)}%
-                  </span>
-
-                  {/* Actual time + met indicator */}
-                  <span className={`text-right whitespace-nowrap ${met ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
-                    {actualTime}
-                    <span className="ml-1">{met ? '✓' : '✗'}</span>
-                  </span>
-                </div>
+                  </td>
+                  <td className={`py-1 text-right whitespace-nowrap ${metClass}`}>
+                    {actualTime} {met ? '✓' : '✗'}
+                  </td>
+                </tr>
               );
             })}
-          </div>
-        </div>
+          </tbody>
+        </table>
       </CardContent>
     </Card>
   );
