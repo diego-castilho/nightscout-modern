@@ -1,0 +1,198 @@
+// ============================================================================
+// Analytics API Routes
+// ============================================================================
+
+import { Router } from 'express';
+import { getGlucoseByDateRange } from '../db/queries.js';
+import {
+  generateAnalytics,
+  detectPatterns,
+  calculateGlucoseStats,
+  calculateTimeInRange,
+  calculateDailyPatterns,
+} from '../services/analytics.js';
+import type { ApiResponse } from '../types/index.js';
+
+const router = Router();
+
+// GET /api/analytics - Get complete analytics for a date range
+router.get('/', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({
+        success: false,
+        error: 'startDate and endDate are required',
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const start = new Date(startDate as string);
+    const end = new Date(endDate as string);
+
+    const entries = await getGlucoseByDateRange(start, end);
+    const analytics = generateAnalytics(entries, start, end);
+
+    const response: ApiResponse = {
+      success: true,
+      data: analytics,
+      timestamp: new Date().toISOString(),
+    };
+
+    return res.json(response);
+  } catch (error) {
+    console.error('Error generating analytics:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to generate analytics',
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// GET /api/analytics/stats - Get glucose statistics only
+router.get('/stats', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({
+        success: false,
+        error: 'startDate and endDate are required',
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const start = new Date(startDate as string);
+    const end = new Date(endDate as string);
+
+    const entries = await getGlucoseByDateRange(start, end);
+    const stats = calculateGlucoseStats(entries);
+
+    const response: ApiResponse = {
+      success: true,
+      data: stats,
+      timestamp: new Date().toISOString(),
+    };
+
+    return res.json(response);
+  } catch (error) {
+    console.error('Error calculating stats:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to calculate statistics',
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// GET /api/analytics/tir - Get Time in Range statistics
+router.get('/tir', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({
+        success: false,
+        error: 'startDate and endDate are required',
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const start = new Date(startDate as string);
+    const end = new Date(endDate as string);
+
+    const entries = await getGlucoseByDateRange(start, end);
+    const tir = calculateTimeInRange(entries);
+
+    const response: ApiResponse = {
+      success: true,
+      data: tir,
+      timestamp: new Date().toISOString(),
+    };
+
+    return res.json(response);
+  } catch (error) {
+    console.error('Error calculating TIR:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to calculate time in range',
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// GET /api/analytics/patterns - Get daily patterns (hourly averages)
+router.get('/patterns', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({
+        success: false,
+        error: 'startDate and endDate are required',
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const start = new Date(startDate as string);
+    const end = new Date(endDate as string);
+
+    const entries = await getGlucoseByDateRange(start, end);
+    const patterns = calculateDailyPatterns(entries);
+
+    const response: ApiResponse = {
+      success: true,
+      data: patterns,
+      timestamp: new Date().toISOString(),
+    };
+
+    return res.json(response);
+  } catch (error) {
+    console.error('Error calculating patterns:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to calculate patterns',
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// GET /api/analytics/detect - Detect glucose patterns (dawn phenomenon, etc.)
+router.get('/detect', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({
+        success: false,
+        error: 'startDate and endDate are required',
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const start = new Date(startDate as string);
+    const end = new Date(endDate as string);
+
+    const entries = await getGlucoseByDateRange(start, end);
+    const detectedPatterns = detectPatterns(entries);
+
+    const response: ApiResponse = {
+      success: true,
+      data: detectedPatterns,
+      timestamp: new Date().toISOString(),
+    };
+
+    return res.json(response);
+  } catch (error) {
+    console.error('Error detecting patterns:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to detect patterns',
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+export default router;

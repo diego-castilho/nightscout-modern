@@ -1,0 +1,122 @@
+---
+# ============================================================================
+# Nightscout Modern - Docker Compose
+# ============================================================================
+# Author: Diego Castilho
+# Description: Modern interface for Nightscout CGM monitoring
+# Stack: React + TypeScript + Vite + Node.js + Express + MongoDB
+# ============================================================================
+
+services:
+  # ==========================================================================
+  # BACKEND API
+  # ==========================================================================
+  nightscout-modern-backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: nightscout-modern-backend
+    hostname: nightscout-modern-backend
+    restart: unless-stopped
+
+    labels:
+      - "com.docker.compose.project=nightscout-modern"
+      - "service.group=health"
+      - "service.type=api"
+      - "service.description=Nightscout Modern Backend API"
+
+    networks:
+      macvlan:
+        ipv4_address: 10.0.0.229
+
+    dns:
+      - 10.0.0.4
+
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      TZ: ${TZ:-America/Sao_Paulo}
+
+      # MongoDB Configuration
+      MONGODB_URI: mongodb://10.0.0.225:27017
+      MONGODB_DB_NAME: test
+      MONGODB_USER: ${MONGODB_USER}
+      MONGODB_PASSWORD: ${MONGODB_PASSWORD}
+
+      # Security
+      API_SECRET: ${NIGHTSCOUT_API_SECRET}
+      JWT_SECRET: ${NIGHTSCOUT_MODERN_JWT_SECRET}
+      JWT_EXPIRES_IN: 7d
+
+      # CORS
+      CORS_ORIGIN: http://10.0.0.231,https://nightscout-modern.diegocastilho.me
+
+      # LibreLink MCP Integration (optional)
+      LIBRELINK_USERNAME: ${LIBRELINK_USERNAME}
+      LIBRELINK_PASSWORD: ${LIBRELINK_PASSWORD}
+      LIBRELINK_REGION: LA
+
+      # Logs
+      LOG_LEVEL: info
+
+    deploy:
+      resources:
+        limits:
+          memory: 2048M
+          cpus: '0.5'
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ==========================================================================
+  # FRONTEND WEB APP
+  # ==========================================================================
+  nightscout-modern-frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    container_name: nightscout-modern-frontend
+    hostname: nightscout-modern-frontend
+    restart: unless-stopped
+
+    labels:
+      - "com.docker.compose.project=nightscout-modern"
+      - "service.group=health"
+      - "service.type=web"
+      - "service.description=Nightscout Modern Frontend"
+
+    networks:
+      macvlan:
+        ipv4_address: 10.0.0.231
+
+    dns:
+      - 10.0.0.4
+
+    environment:
+      TZ: ${TZ:-America/Sao_Paulo}
+
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.25'
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+# ============================================================================
+# NETWORKS
+# ============================================================================
+
+networks:
+  macvlan:
+    external: true
+    name: docker_macvlan
