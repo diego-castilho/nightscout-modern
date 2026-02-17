@@ -1,0 +1,44 @@
+---
+# ============================================================================
+# Nightscout Modern - MacVLAN Network Override
+# ============================================================================
+# Use this file when running on a host with a MacVLAN network configured,
+# assigning static LAN IPs to containers.
+#
+# Required .env variables for this override:
+#   BACKEND_IP=10.0.0.229    # LAN IP for the backend container
+#   FRONTEND_IP=10.0.0.231   # LAN IP for the frontend container
+#   MACVLAN_DNS=10.0.0.1     # Your LAN DNS server / router IP
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.macvlan.yml up -d
+#
+# MacVLAN network must be pre-created:
+#   docker network create -d macvlan \
+#     --subnet=10.0.0.0/24 --gateway=10.0.0.1 \
+#     -o parent=eth0 docker_macvlan
+# ============================================================================
+
+services:
+  nightscout-modern-backend:
+    ports: !reset []          # remove default port binding
+    networks:
+      nightscout_internal:   # keep internal DNS
+      macvlan:
+        ipv4_address: ${BACKEND_IP}
+    dns:
+      - ${MACVLAN_DNS:-10.0.0.1}
+
+  nightscout-modern-frontend:
+    ports: !reset []          # remove default port binding (MacVLAN uses direct IP)
+    networks:
+      nightscout_internal:   # keep internal DNS for nginx → backend
+      macvlan:
+        ipv4_address: ${FRONTEND_IP}
+    dns:
+      - ${MACVLAN_DNS:-10.0.0.1}
+
+networks:
+  macvlan:
+    external: true
+    name: docker_macvlan
