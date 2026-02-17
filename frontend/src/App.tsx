@@ -1,67 +1,79 @@
-import { useEffect, useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { getLatestGlucose, getAnalytics, type GlucoseEntry, type GlucoseAnalytics } from '@/lib/api';
-import { formatGlucose, getGlucoseColor, getTrendArrow, timeAgo } from '@/lib/utils';
-import { subHours } from 'date-fns';
+// ============================================================================
+// App - Main Dashboard
+// ============================================================================
+
+import { useEffect } from 'react';
+import { useGlucoseData } from './hooks/useGlucoseData';
+import { useTheme } from './hooks/useTheme';
+import { useDashboardStore, getPeriodDates } from './stores/dashboardStore';
+import { detectPatterns } from './lib/api';
+import { useState } from 'react';
+import type { DetectedPattern } from './lib/api';
+
+import { Header } from './components/layout/Header';
+import { PeriodSelector } from './components/layout/PeriodSelector';
+import { CurrentGlucoseCard } from './components/dashboard/CurrentGlucoseCard';
+import { StatsGrid } from './components/dashboard/StatsGrid';
+import { PatternsAlert } from './components/dashboard/PatternsAlert';
+import { GlucoseAreaChart } from './components/charts/GlucoseAreaChart';
+import { TIRChart } from './components/charts/TIRChart';
+import { DailyPatternChart } from './components/charts/DailyPatternChart';
+
+import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card';
+import { Button } from './components/ui/button';
+import { AlertCircle } from 'lucide-react';
 
 function App() {
-  const [latestGlucose, setLatestGlucose] = useState<GlucoseEntry | null>(null);
-  const [analytics, setAnalytics] = useState<GlucoseAnalytics | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Initialize theme from persisted state
+  useTheme();
 
+  const { period, lastRefresh, triggerRefresh } = useDashboardStore();
+  const { entries, latest, analytics, loading, error } = useGlucoseData();
+  const [patterns, setPatterns] = useState<DetectedPattern[]>([]);
+  const [patternsLoading, setPatternsLoading] = useState(true);
+
+  // Fetch detected patterns separately (can be slow)
   useEffect(() => {
-    loadData();
-  }, []);
+    let cancelled = false;
+    setPatternsLoading(true);
 
-  async function loadData() {
-    try {
-      setLoading(true);
-      setError(null);
+    const { startDate, endDate } = getPeriodDates(period);
+    detectPatterns(startDate, endDate)
+      .then((data) => {
+        if (!cancelled) {
+          setPatterns(data ?? []);
+          setPatternsLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPatterns([]);
+          setPatternsLoading(false);
+        }
+      });
 
-      // Load latest glucose
-      const glucose = await getLatestGlucose();
-      setLatestGlucose(glucose);
+    return () => { cancelled = true; };
+  }, [period, lastRefresh]);
 
-      // Load 24h analytics
-      const endDate = new Date();
-      const startDate = subHours(endDate, 24);
-      const analyticsData = await getAnalytics(
-        startDate.toISOString(),
-        endDate.toISOString()
-      );
-      setAnalytics(analyticsData);
-    } catch (err) {
-      console.error('Error loading data:', err);
-      setError('Failed to load data. Please check if the backend is running.');
-    } finally {
-      setLoading(false);
-    }
-  }
+  const lastUpdated = latest ? new Date(latest.date) : null;
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-pulse text-4xl mb-4">📊</div>
-          <p className="text-muted-foreground">Loading Nightscout data...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
+  if (error && !loading && !latest) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="max-w-md">
+        <Card className="max-w-md w-full">
           <CardHeader>
-            <CardTitle className="text-destructive">Error</CardTitle>
-            <CardDescription>{error}</CardDescription>
+            <CardTitle className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="h-5 w-5" />
+              Erro ao carregar dados
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <Button onClick={loadData} variant="outline" className="w-full">
-              Retry
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">{error}</p>
+            <p className="text-xs text-muted-foreground">
+              Verifique se o backend está rodando em {import.meta.env.VITE_API_URL}
+            </p>
+            <Button onClick={() => triggerRefresh()} variant="outline" className="w-full">
+              Tentar novamente
             </Button>
           </CardContent>
         </Card>
@@ -71,132 +83,44 @@ function App() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold">Nightscout Modern</h1>
-              <p className="text-sm text-muted-foreground">
-                Continuous Glucose Monitoring
+      <Header lastUpdated={lastUpdated} />
+
+      <main className="container mx-auto px-4 py-4 max-w-5xl">
+        <div className="space-y-4">
+          {/* Period selector */}
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <PeriodSelector />
+            {analytics && (
+              <p className="text-xs text-muted-foreground">
+                {analytics.totalReadings} leituras · {analytics.period.days} dias
               </p>
-            </div>
-            <Button onClick={loadData} variant="outline" size="sm">
-              Refresh
-            </Button>
+            )}
           </div>
-        </div>
-      </header>
 
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
-        <div className="grid gap-6">
-          {/* Current Glucose */}
-          {latestGlucose && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Current Glucose</CardTitle>
-                <CardDescription>
-                  {timeAgo(latestGlucose.date)}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className={`text-6xl font-bold ${getGlucoseColor(latestGlucose.sgv)}`}>
-                      {formatGlucose(latestGlucose.sgv)}
-                      <span className="text-2xl ml-2">mg/dL</span>
-                    </div>
-                    {latestGlucose.trend !== undefined && (
-                      <div className="text-xl mt-2 text-muted-foreground">
-                        {getTrendArrow(latestGlucose.trend)}
-                      </div>
-                    )}
-                  </div>
-                  {latestGlucose.delta !== undefined && (
-                    <div className="text-right">
-                      <div className="text-sm text-muted-foreground">Delta</div>
-                      <div className="text-2xl font-semibold">
-                        {latestGlucose.delta > 0 ? '+' : ''}
-                        {latestGlucose.delta}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          {/* Current glucose - prominent */}
+          <CurrentGlucoseCard latest={latest} loading={loading} />
 
-          {/* 24h Analytics */}
-          {analytics && (
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Average Glucose</CardTitle>
-                  <CardDescription>Last 24 hours</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-4xl font-bold">
-                    {analytics.stats.average} <span className="text-xl">mg/dL</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    GMI: {analytics.stats.gmi}% | Est. A1c: {analytics.stats.estimatedA1c}%
-                  </p>
-                </CardContent>
-              </Card>
+          {/* Main chart */}
+          <GlucoseAreaChart entries={entries} loading={loading} />
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Time in Range</CardTitle>
-                  <CardDescription>70-180 mg/dL</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-4xl font-bold text-green-600">
-                    {analytics.timeInRange.percentInRange}%
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    {analytics.timeInRange.inRange} of {analytics.totalReadings} readings
-                  </p>
-                </CardContent>
-              </Card>
+          {/* Stats grid */}
+          <StatsGrid analytics={analytics} loading={loading} />
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Variability</CardTitle>
-                  <CardDescription>Coefficient of Variation</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-4xl font-bold">
-                    {analytics.stats.cv}%
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Target: {'<'}36% | StdDev: {analytics.stats.stdDev}
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-          )}
+          {/* TIR + Daily Pattern */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <TIRChart
+              tir={analytics?.timeInRange ?? null}
+              loading={loading}
+              totalReadings={analytics?.totalReadings}
+            />
+            <DailyPatternChart
+              patterns={analytics?.dailyPatterns ?? []}
+              loading={loading}
+            />
+          </div>
 
-          {/* Coming Soon */}
-          <Card>
-            <CardHeader>
-              <CardTitle>🚧 Under Development</CardTitle>
-              <CardDescription>
-                This is the initial setup. More features coming soon!
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ul className="list-disc list-inside space-y-2 text-sm text-muted-foreground">
-                <li>Interactive glucose charts (Recharts)</li>
-                <li>Real-time WebSocket updates</li>
-                <li>Daily pattern visualization</li>
-                <li>Treatment tracking (insulin/carbs)</li>
-                <li>AI-powered insights with Claude MCP</li>
-                <li>Push notifications</li>
-                <li>PDF/Excel export</li>
-              </ul>
-            </CardContent>
-          </Card>
+          {/* Detected patterns */}
+          <PatternsAlert patterns={patterns} loading={patternsLoading} />
         </div>
       </main>
     </div>
