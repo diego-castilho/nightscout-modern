@@ -138,7 +138,11 @@ export async function getAnalytics(
     if (thresholds.high     !== undefined) params.high     = thresholds.high;
     if (thresholds.veryHigh !== undefined) params.veryHigh = thresholds.veryHigh;
   }
-  const response = await api.get<{ success: boolean; data: GlucoseAnalytics }>('/analytics', { params });
+  // Analytics queries can be slow for long periods (7d/14d/30d) — use 45s timeout
+  const response = await api.get<{ success: boolean; data: GlucoseAnalytics }>('/analytics', {
+    params,
+    timeout: 45_000,
+  });
   return response.data.data;
 }
 
@@ -174,6 +178,7 @@ export interface DetectedPattern {
 export async function detectPatterns(startDate: string, endDate: string) {
   const response = await api.get<{ success: boolean; data: DetectedPattern[] }>('/analytics/detect', {
     params: { startDate, endDate },
+    timeout: 45_000,
   });
   return response.data.data;
 }

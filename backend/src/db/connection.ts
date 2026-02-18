@@ -36,7 +36,7 @@ export async function connectToDatabase(config: ConnectionConfig): Promise<Db> {
       maxPoolSize: 10,
       minPoolSize: 2,
       serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 45000,
+      socketTimeoutMS: 90_000,   // must exceed maxTimeMS (60s) used in queries
     });
 
     await client.connect();
