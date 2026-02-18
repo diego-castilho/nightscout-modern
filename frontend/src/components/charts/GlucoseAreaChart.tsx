@@ -9,13 +9,18 @@
 // AR2 prediction: extends the chart 30 min ahead using the same algorithm
 // as Nightscout (sgv_next = 1.6*s0 - 0.6*s1). Shown as a dashed line with
 // the same TIR zone colors at lower opacity.
+//
+// Treatment markers: Colored circles with letter codes overlaid at the
+// bottom of the chart for each treatment in the visible period.
+// Hover shows a detailed tooltip. Only visible for periods ≤ 24h.
 // ============================================================================
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   ComposedChart,
   Area,
   Line,
+  Scatter,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -28,10 +33,12 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ZoomOut } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import type { GlucoseEntry } from '../../lib/api';
-import { useDashboardStore, type Period, type AlarmThresholds } from '../../stores/dashboardStore';
+import { getTreatments } from '../../lib/api';
+import type { GlucoseEntry, Treatment } from '../../lib/api';
+import { useDashboardStore, getPeriodDates, type Period, type AlarmThresholds } from '../../stores/dashboardStore';
 import { getTrendArrow } from '../../lib/utils';
 import { formatGlucose, unitLabel } from '../../lib/glucose';
+import type { GlucoseUnit } from '../../lib/glucose';
 
 interface Props {
   entries: GlucoseEntry[];
@@ -46,13 +53,23 @@ interface ChartPoint {
   trend?: number;
 }
 
+// ── Treatment visual config ─────────────────────────────────────────────────
+
+const TREATMENT_VISUAL: Record<string, { color: string; label: string; char: string }> = {
+  'Meal Bolus':       { color: '#3b82f6', label: 'Refeição + Bolus',   char: 'R' },
+  'Correction Bolus': { color: '#8b5cf6', label: 'Bolus de Correção',  char: 'B' },
+  'Carb Correction':  { color: '#f97316', label: 'Correção de Carbos', char: 'C' },
+  'BG Check':         { color: '#14b8a6', label: 'Leitura de Glicose', char: 'G' },
+  'Note':             { color: '#64748b', label: 'Anotação',            char: 'N' },
+};
+
 // TIR zone colors (matching TIRChart)
 const ZONE = {
-  veryHigh: '#dc2626',  // >250 mg/dL
-  high:     '#f59e0b',  // 180–250 mg/dL
-  inRange:  '#22c55e',  // 70–180 mg/dL
-  low:      '#f97316',  // 54–70 mg/dL
-  veryLow:  '#dc2626',  // <54 mg/dL
+  veryHigh: '#dc2626',
+  high:     '#f59e0b',
+  inRange:  '#22c55e',
+  low:      '#f97316',
+  veryLow:  '#dc2626',
 };
 
 // Converts a glucose value to a gradient offset (0% = top, 100% = bottom)
@@ -74,55 +91,39 @@ function zoneColor(val: number, t: AlarmThresholds): string {
 
 // Builds gradient stops with exact boundary positions for the stroke
 function buildStrokeStops(minVal: number, maxVal: number, t: AlarmThresholds) {
-  const thresholds = [t.veryHigh, t.high, t.low, t.veryLow]; // descending
+  const thresholds = [t.veryHigh, t.high, t.low, t.veryLow];
   const stops: { offset: string; color: string }[] = [];
 
-  // Top boundary
   stops.push({ offset: '0%', color: zoneColor(maxVal, t) });
-
-  // Add a stop pair at each threshold that falls within [minVal, maxVal]
   for (const thresh of thresholds) {
     if (thresh < maxVal && thresh > minVal) {
       const off = toOffset(thresh, minVal, maxVal);
-      stops.push({ offset: off, color: zoneColor(thresh + 1, t) }); // just above threshold
-      stops.push({ offset: off, color: zoneColor(thresh - 1, t) }); // just below threshold
+      stops.push({ offset: off, color: zoneColor(thresh + 1, t) });
+      stops.push({ offset: off, color: zoneColor(thresh - 1, t) });
     }
   }
-
-  // Bottom boundary
   stops.push({ offset: '100%', color: zoneColor(minVal, t) });
-
   return stops;
 }
 
-// ── AR2 prediction algorithm (same coefficients as Nightscout) ──────────────
-// sgv_next = 1.6 × sgv_t − 0.6 × sgv_(t-1)
-// Generates 'steps' predictions at the actual CGM interval (typically 5 min).
-// Returns empty array if last reading is stale (> 10 min old).
+// ── AR2 prediction algorithm ─────────────────────────────────────────────────
+
 function calculateAR2(
   entries: GlucoseEntry[],
   steps = 6
 ): Array<{ time: number; sgvPredicted: number }> {
   if (entries.length < 2) return [];
-
   const sorted = [...entries].sort((a, b) => b.date - a.date);
   const last = sorted[0];
   const prev = sorted[1];
-
-  // Don't predict if last reading is older than 10 minutes
   if (Date.now() - last.date > 10 * 60_000) return [];
-
-  // Use actual interval between the two most recent readings (clamp 3–10 min)
   const interval = Math.max(3 * 60_000, Math.min(10 * 60_000, last.date - prev.date));
-
   const predictions: Array<{ time: number; sgvPredicted: number }> = [];
   let s0 = last.sgv, s1 = prev.sgv;
-
   for (let i = 1; i <= steps; i++) {
     const p = Math.max(40, Math.min(400, 1.6 * s0 - 0.6 * s1));
     predictions.push({ time: last.date + i * interval, sgvPredicted: p });
-    s1 = s0;
-    s0 = p;
+    s1 = s0; s0 = p;
   }
   return predictions;
 }
@@ -146,28 +147,99 @@ function getTickConfig(period: Period, start: number, end: number) {
   return { ticks, formatStr };
 }
 
-// X-axis tick config when zoomed (based on visible duration)
+// X-axis tick config when zoomed
 function getZoomedTickConfig(domainMs: number): { intervalMs: number; formatStr: string } {
-  if (domainMs <= 2 * 3600_000)   return { intervalMs: 5 * 60_000,        formatStr: 'HH:mm' };
-  if (domainMs <= 6 * 3600_000)   return { intervalMs: 15 * 60_000,       formatStr: 'HH:mm' };
-  if (domainMs <= 12 * 3600_000)  return { intervalMs: 30 * 60_000,       formatStr: 'HH:mm' };
-  if (domainMs <= 24 * 3600_000)  return { intervalMs: 60 * 60_000,       formatStr: 'HH:mm' };
+  if (domainMs <= 2 * 3600_000)   return { intervalMs: 5 * 60_000,    formatStr: 'HH:mm' };
+  if (domainMs <= 6 * 3600_000)   return { intervalMs: 15 * 60_000,   formatStr: 'HH:mm' };
+  if (domainMs <= 12 * 3600_000)  return { intervalMs: 30 * 60_000,   formatStr: 'HH:mm' };
+  if (domainMs <= 24 * 3600_000)  return { intervalMs: 60 * 60_000,   formatStr: 'HH:mm' };
   return { intervalMs: 24 * 3600_000, formatStr: 'dd/MM' };
 }
 
-interface CustomTooltipWithUnitProps {
+// ── Treatment tooltip (HTML overlay) ─────────────────────────────────────────
+
+function TreatmentTooltipContent({ treatment, unit }: { treatment: Treatment; unit: GlucoseUnit }) {
+  const ul = unitLabel(unit);
+  const cfg = TREATMENT_VISUAL[treatment.eventType];
+  const labelPT = cfg?.label ?? treatment.eventType;
+  const timeStr = format(new Date(treatment.created_at), "dd/MM 'às' HH:mm", { locale: ptBR });
+
+  return (
+    <div>
+      <p className="font-semibold text-xs mb-0.5" style={{ color: cfg?.color }}>{labelPT}</p>
+      <p className="text-[10px] text-muted-foreground mb-1.5">{timeStr}</p>
+      <div className="space-y-0.5 text-xs">
+        {treatment.insulin  != null && <p>Insulina: <span className="font-medium">{treatment.insulin}U</span></p>}
+        {treatment.carbs    != null && <p>Carbos: <span className="font-medium">{treatment.carbs}g</span></p>}
+        {treatment.glucose  != null && <p>Glicose: <span className="font-medium">{formatGlucose(treatment.glucose, unit)} {ul}</span></p>}
+        {treatment.protein  != null && <p>Proteína: <span className="font-medium">{treatment.protein}g</span></p>}
+        {treatment.fat      != null && <p>Gordura: <span className="font-medium">{treatment.fat}g</span></p>}
+        {treatment.notes              && <p className="text-muted-foreground italic mt-0.5">"{treatment.notes}"</p>}
+      </div>
+    </div>
+  );
+}
+
+// ── Custom SVG shape for treatment Scatter points ─────────────────────────────
+
+interface TreatmentShapeProps {
+  cx?: number;
+  cy?: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload?: any;
+  onEnter: (treatment: Treatment, cx: number, cy: number) => void;
+  onLeave: () => void;
+}
+
+function TreatmentShape({ cx = 0, cy = 0, payload, onEnter, onLeave }: TreatmentShapeProps) {
+  if (!payload?.isTreatment || !payload.treatment) return null;
+  const cfg = TREATMENT_VISUAL[payload.treatment.eventType];
+  if (!cfg) return null;
+
+  return (
+    <g
+      onMouseEnter={() => onEnter(payload.treatment, cx, cy)}
+      onMouseLeave={onLeave}
+      style={{ cursor: 'pointer' }}
+    >
+      {/* White ring for contrast against all chart backgrounds */}
+      <circle cx={cx} cy={cy} r={9}   fill="white"    opacity={0.75} />
+      <circle cx={cx} cy={cy} r={7.5} fill={cfg.color} opacity={0.92} />
+      <text
+        x={cx} y={cy + 3.5}
+        textAnchor="middle"
+        fill="white"
+        fontSize={8.5}
+        fontWeight="bold"
+        style={{ pointerEvents: 'none', userSelect: 'none' }}
+      >
+        {cfg.char}
+      </text>
+    </g>
+  );
+}
+
+// ── Recharts tooltip for glucose points ──────────────────────────────────────
+
+interface CustomTooltipProps {
   active?: boolean;
-  payload?: Array<{ payload: ChartPoint }>;
-  unit: import('../../lib/glucose').GlucoseUnit;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload?: Array<{ payload: any }>;
+  unit: GlucoseUnit;
   thresholds: AlarmThresholds;
 }
 
-function CustomTooltip({ active, payload, unit, thresholds }: CustomTooltipWithUnitProps) {
+function CustomTooltip({ active, payload, unit, thresholds }: CustomTooltipProps) {
   if (!active || !payload?.length) return null;
   const point = payload[0].payload;
+
+  // Treatment markers use their own HTML overlay — suppress Recharts tooltip
+  if (point?.isTreatment) return null;
+
   const isPrediction = point.sgv == null && point.sgvPredicted != null;
   const value = isPrediction ? point.sgvPredicted! : (point.sgv ?? 0);
   const color = zoneColor(value, thresholds);
+
   return (
     <div className="bg-background border border-border rounded-lg shadow-lg p-3 text-sm">
       <p className="text-muted-foreground text-xs mb-1">
@@ -182,14 +254,38 @@ function CustomTooltip({ active, payload, unit, thresholds }: CustomTooltipWithU
   );
 }
 
+// ── Main component ────────────────────────────────────────────────────────────
+
 export function GlucoseAreaChart({ entries, loading }: Props) {
-  const { period, unit, alarmThresholds, darkMode } = useDashboardStore();
+  const { period, unit, alarmThresholds, darkMode, lastRefresh } = useDashboardStore();
 
   // Zoom state
-  const [zoomLeft, setZoomLeft]     = useState<number | null>(null);
-  const [zoomRight, setZoomRight]   = useState<number | null>(null);
+  const [zoomLeft, setZoomLeft]         = useState<number | null>(null);
+  const [zoomRight, setZoomRight]       = useState<number | null>(null);
   const [zoomedDomain, setZoomedDomain] = useState<[number, number] | null>(null);
   const isZoomed = zoomedDomain !== null;
+
+  // Treatment markers state
+  const [treatments, setTreatments] = useState<Treatment[]>([]);
+  const [treatmentTooltip, setTreatmentTooltip] = useState<{
+    treatment: Treatment;
+    cx: number;
+    cy: number;
+  } | null>(null);
+
+  // Show markers only for periods ≤ 24h (for longer periods the chart scale
+  // makes markers too dense and visually unreadable)
+  const showTreatments = ['1h', '3h', '6h', '12h', '24h'].includes(period);
+
+  useEffect(() => {
+    if (!showTreatments) { setTreatments([]); return; }
+    let cancelled = false;
+    const { startDate, endDate } = getPeriodDates(period as Period);
+    getTreatments({ startDate, endDate, limit: 500 })
+      .then((data) => { if (!cancelled) setTreatments(data ?? []); })
+      .catch(() => { if (!cancelled) setTreatments([]); });
+    return () => { cancelled = true; };
+  }, [period, lastRefresh, showTreatments]);
 
   const resetZoom = () => setZoomedDomain(null);
 
@@ -219,14 +315,13 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
     .sort((a, b) => a.date - b.date)
     .map((e) => ({ time: e.date, sgv: e.sgv, direction: e.direction, trend: e.trend }));
 
-  // ── AR2 predictions ────────────────────────────────────────────────────────
+  // ── AR2 predictions ─────────────────────────────────────────────────────────
   const showPredictions = ['1h', '3h', '6h', '12h', '24h'].includes(period);
   let chartData: ChartPoint[] = data.map((d) => ({ ...d }));
 
   if (showPredictions && data.length >= 2) {
     const predPoints = calculateAR2(entries);
     if (predPoints.length > 0) {
-      // Bridge: last real point also carries sgvPredicted to seamlessly connect lines
       chartData[chartData.length - 1] = {
         ...chartData[chartData.length - 1],
         sgvPredicted: chartData[chartData.length - 1].sgv,
@@ -237,21 +332,39 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
     }
   }
 
-  // Filter to zoomed range — this is what actually expands the chart visually
+  // Filter to zoomed range
   const visibleData = zoomedDomain
     ? chartData.filter((d) => d.time >= zoomedDomain[0] && d.time <= zoomedDomain[1])
     : chartData;
-
   const displayData = visibleData.length > 0 ? visibleData : chartData;
 
-  // Y axis adapts to the visible range (includes prediction values)
+  // Y axis adapts to visible range
   const allSgv = displayData.flatMap((d) => [d.sgv, d.sgvPredicted]).filter((v): v is number => v != null);
   const rawMin = allSgv.length > 0 ? Math.min(...allSgv) : 70;
   const rawMax = allSgv.length > 0 ? Math.max(...allSgv) : 180;
   const minVal = Math.max(0, rawMin - 20);
   const maxVal = Math.min(400, rawMax + 30);
 
-  // Active ticks/format — adapts when zoomed
+  // ── Treatment marker points ─────────────────────────────────────────────────
+  const displayStart = zoomedDomain ? zoomedDomain[0] : (data[0]?.time ?? 0);
+  const displayEnd   = zoomedDomain ? zoomedDomain[1] : (chartData[chartData.length - 1]?.time ?? Date.now());
+  const markerY = minVal + (maxVal - minVal) * 0.05; // 5% from bottom edge
+
+  const treatmentPoints = treatments
+    .filter((t) => {
+      const ts = new Date(t.created_at).getTime();
+      return ts >= displayStart && ts <= displayEnd;
+    })
+    .map((t) => ({
+      time:        new Date(t.created_at).getTime(),
+      markerY,
+      isTreatment: true as const,
+      treatment:   t,
+    }));
+
+  const visibleEventTypes = [...new Set(treatmentPoints.map((p) => p.treatment.eventType))];
+
+  // Tick config
   const { ticks: baseTicks, formatStr: baseFormatStr } = getTickConfig(
     period, data[0].time, chartData[chartData.length - 1].time
   );
@@ -268,17 +381,14 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
     activeTicks = zTicks;
     activeFormatStr = zFs;
   } else {
-    activeTicks = baseTicks;
+    activeTicks    = baseTicks;
     activeFormatStr = baseFormatStr;
   }
 
-  // Dots only for dense enough views
   const actualCount = displayData.filter((d) => d.sgv != null).length;
   const showDots = actualCount <= 20;
-
   const strokeStops = buildStrokeStops(minVal, maxVal, alarmThresholds);
 
-  // Reference lines only if threshold is within the Y range
   const refLines: { y: number; color: string; label: string; dash: string }[] = [
     { y: alarmThresholds.veryHigh, color: ZONE.veryHigh, label: String(alarmThresholds.veryHigh), dash: '3 4' },
     { y: alarmThresholds.high,     color: ZONE.high,     label: String(alarmThresholds.high),     dash: '4 4' },
@@ -286,31 +396,37 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
     { y: alarmThresholds.veryLow,  color: ZONE.veryLow,  label: String(alarmThresholds.veryLow),  dash: '2 4' },
   ].filter((r) => r.y > minVal && r.y < maxVal);
 
-  // Zoom event handlers — activeLabel gives the interpolated XAxis numeric value
+  // Zoom handlers
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleMouseDown = (e: any) => {
     if (e?.activeLabel != null) setZoomLeft(Number(e.activeLabel));
   };
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleMouseMove = (e: any) => {
-    if (zoomLeft !== null && e?.activeLabel != null) {
-      setZoomRight(Number(e.activeLabel));
-    }
+    if (zoomLeft !== null && e?.activeLabel != null) setZoomRight(Number(e.activeLabel));
   };
-
   const handleMouseUp = () => {
     if (zoomLeft !== null && zoomRight !== null) {
       const l = Math.min(zoomLeft, zoomRight);
       const r = Math.max(zoomLeft, zoomRight);
-      if (r - l > 60_000) setZoomedDomain([l, r]); // minimum 1 minute
+      if (r - l > 60_000) setZoomedDomain([l, r]);
     }
     setZoomLeft(null);
     setZoomRight(null);
   };
 
-  const selectionFill = darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
-  const selectionStroke = darkMode ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.3)';
+  const selectionFill   = darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  const selectionStroke = darkMode ? 'rgba(255,255,255,0.4)'  : 'rgba(0,0,0,0.3)';
+
+  // Treatment shape renderer — closes over the state setter
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const treatmentShape = (props: any) => (
+    <TreatmentShape
+      {...props}
+      onEnter={(t: Treatment, cx: number, cy: number) => setTreatmentTooltip({ treatment: t, cx, cy })}
+      onLeave={() => setTreatmentTooltip(null)}
+    />
+  );
 
   return (
     <Card>
@@ -335,8 +451,10 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
           </p>
         )}
       </CardHeader>
+
       <CardContent className="pt-0">
-        <div style={{ cursor: zoomLeft !== null ? 'ew-resize' : 'crosshair' }}>
+        {/* Wrapper with position:relative for the treatment tooltip overlay */}
+        <div style={{ position: 'relative', cursor: zoomLeft !== null ? 'ew-resize' : 'crosshair' }}>
           <ResponsiveContainer width="100%" height={280}>
             <ComposedChart
               data={displayData}
@@ -347,24 +465,18 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
               onDoubleClick={resetZoom}
             >
               <defs>
-                {/* Stroke gradient — color changes at exact TIR zone boundaries */}
                 <linearGradient id="glStroke" x1="0" y1="0" x2="0" y2="1">
                   {strokeStops.map((s, i) => (
                     <stop key={i} offset={s.offset} stopColor={s.color} stopOpacity={0.95} />
                   ))}
                 </linearGradient>
-
-                {/* Fill gradient — same zones, very light opacity */}
                 <linearGradient id="glFill" x1="0" y1="0" x2="0" y2="1">
                   {strokeStops.map((s, i) => {
-                    // Lighter at bottom for depth effect
                     const frac = parseFloat(s.offset) / 100;
                     const op = Math.max(0.02, 0.20 - frac * 0.16);
                     return <stop key={i} offset={s.offset} stopColor={s.color} stopOpacity={op} />;
                   })}
                 </linearGradient>
-
-                {/* Prediction stroke gradient — same zones, lower opacity */}
                 <linearGradient id="predStroke" x1="0" y1="0" x2="0" y2="1">
                   {strokeStops.map((s, i) => (
                     <stop key={i} offset={s.offset} stopColor={s.color} stopOpacity={0.6} />
@@ -434,7 +546,7 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
                 connectNulls={false}
               />
 
-              {/* AR2 prediction line — dashed, same zone colors at lower opacity */}
+              {/* AR2 prediction line */}
               {showPredictions && (
                 <Line
                   type="monotone"
@@ -449,7 +561,17 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
                 />
               )}
 
-              {/* Selection highlight during drag */}
+              {/* Treatment markers — Scatter with custom SVG shapes */}
+              {showTreatments && treatmentPoints.length > 0 && (
+                <Scatter
+                  data={treatmentPoints}
+                  dataKey="markerY"
+                  shape={treatmentShape}
+                  isAnimationActive={false}
+                />
+              )}
+
+              {/* Selection highlight during drag-to-zoom */}
               {zoomLeft !== null && zoomRight !== null && (
                 <ReferenceArea
                   x1={Math.min(zoomLeft, zoomRight)}
@@ -461,7 +583,42 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
               )}
             </ComposedChart>
           </ResponsiveContainer>
+
+          {/* Treatment tooltip — HTML div absolutely positioned over the SVG */}
+          {treatmentTooltip && (
+            <div
+              style={{
+                position: 'absolute',
+                left:     Math.min(treatmentTooltip.cx + 14, 250),
+                top:      Math.max(treatmentTooltip.cy - 24, 4),
+                zIndex:   50,
+                pointerEvents: 'none',
+              }}
+              className="bg-background border border-border rounded-lg shadow-xl p-2.5 text-xs min-w-[150px] max-w-[210px]"
+            >
+              <TreatmentTooltipContent treatment={treatmentTooltip.treatment} unit={unit} />
+            </div>
+          )}
         </div>
+
+        {/* Legend — shown only when treatment markers are present in the visible window */}
+        {showTreatments && visibleEventTypes.length > 0 && (
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-2 pt-2 border-t border-border/50">
+            {Object.entries(TREATMENT_VISUAL)
+              .filter(([type]) => visibleEventTypes.includes(type))
+              .map(([type, { color, char, label }]) => (
+                <div key={type} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                  <span
+                    className="inline-flex items-center justify-center rounded-full text-white font-bold shrink-0"
+                    style={{ backgroundColor: color, width: 15, height: 15, fontSize: 8 }}
+                  >
+                    {char}
+                  </span>
+                  {label}
+                </div>
+              ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
