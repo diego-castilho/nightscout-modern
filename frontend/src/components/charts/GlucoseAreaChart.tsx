@@ -180,8 +180,16 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
     .sort((a, b) => a.date - b.date)
     .map((e) => ({ time: e.date, sgv: e.sgv, direction: e.direction, trend: e.trend }));
 
-  const rawMin = Math.min(...data.map((d) => d.sgv));
-  const rawMax = Math.max(...data.map((d) => d.sgv));
+  // Filter to zoomed range — this is what actually expands the chart visually
+  const visibleData = zoomedDomain
+    ? data.filter(d => d.time >= zoomedDomain[0] && d.time <= zoomedDomain[1])
+    : data;
+
+  const displayData = visibleData.length > 0 ? visibleData : data;
+
+  // Y axis adapts to the visible range when zoomed
+  const rawMin = Math.min(...displayData.map((d) => d.sgv));
+  const rawMax = Math.max(...displayData.map((d) => d.sgv));
   const minVal = Math.max(0, rawMin - 20);
   const maxVal = Math.min(400, rawMax + 30);
 
@@ -206,7 +214,7 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
     activeFormatStr = baseFormatStr;
   }
 
-  const showDots = data.length <= 20;
+  const showDots = displayData.length <= 20;
   const strokeStops = buildStrokeStops(minVal, maxVal, alarmThresholds);
 
   // Reference lines only if threshold is within the Y range
@@ -217,18 +225,16 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
     { y: alarmThresholds.veryLow,  color: ZONE.veryLow,  label: String(alarmThresholds.veryLow),  dash: '2 4' },
   ].filter((r) => r.y > minVal && r.y < maxVal);
 
-  // Zoom event handlers
+  // Zoom event handlers — activeLabel gives the interpolated XAxis numeric value
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleMouseDown = (e: any) => {
-    const time = e?.activePayload?.[0]?.payload?.time;
-    if (time !== undefined) setZoomLeft(time as number);
+    if (e?.activeLabel != null) setZoomLeft(Number(e.activeLabel));
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleMouseMove = (e: any) => {
-    if (zoomLeft !== null) {
-      const time = e?.activePayload?.[0]?.payload?.time;
-      if (time !== undefined) setZoomRight(time as number);
+    if (zoomLeft !== null && e?.activeLabel != null) {
+      setZoomRight(Number(e.activeLabel));
     }
   };
 
@@ -272,7 +278,7 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
         <div style={{ cursor: zoomLeft !== null ? 'ew-resize' : 'crosshair' }}>
           <ResponsiveContainer width="100%" height={280}>
             <ComposedChart
-              data={data}
+              data={displayData}
               margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
@@ -309,7 +315,7 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
                 dataKey="time"
                 type="number"
                 scale="time"
-                domain={zoomedDomain ?? ['dataMin', 'dataMax']}
+                domain={['dataMin', 'dataMax']}
                 ticks={activeTicks}
                 tickFormatter={(ms: number) => format(new Date(ms), activeFormatStr, { locale: ptBR })}
                 tick={{ fontSize: 11, fill: 'currentColor' }}
