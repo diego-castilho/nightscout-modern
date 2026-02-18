@@ -33,43 +33,17 @@ interface RangeRow {
 function buildRanges(t: AlarmThresholds): RangeRow[] {
   return [
     {
-      label: 'Muito Alto',
-      range: `>${t.veryHigh}`,
-      thresholdLow: t.veryHigh,
-      targetLabel: 'Menor que 5%',
-      targetPct: 5,
+      label: 'Muito Baixo',
+      range: `<${t.veryLow}`,
+      thresholdHigh: t.veryLow,
+      targetLabel: 'Menor que 1%',
+      targetPct: 1,
       targetOp: '<=',
       color: '#dc2626',
-      bgColor: 'bg-red-600',
-      textColor: 'text-red-600 dark:text-red-400',
-      percentKey: 'percentVeryHigh',
-      countKey: 'veryHigh',
-    },
-    {
-      label: 'Alto',
-      range: `${t.high}–${t.veryHigh}`,
-      thresholdLow: t.high, thresholdHigh: t.veryHigh,
-      targetLabel: 'Menor que 25%',
-      targetPct: 25,
-      targetOp: '<=',
-      color: '#f59e0b',
-      bgColor: 'bg-amber-500',
-      textColor: 'text-amber-500 dark:text-amber-400',
-      percentKey: 'percentHigh',
-      countKey: 'high',
-    },
-    {
-      label: 'Alvo',
-      range: `${t.low}–${t.high}`,
-      thresholdLow: t.low, thresholdHigh: t.high,
-      targetLabel: 'Maior que 70%',
-      targetPct: 70,
-      targetOp: '>=',
-      color: '#22c55e',
-      bgColor: 'bg-green-500',
-      textColor: 'text-green-600 dark:text-green-400',
-      percentKey: 'percentInRange',
-      countKey: 'inRange',
+      bgColor: 'bg-red-700',
+      textColor: 'text-red-700 dark:text-red-400',
+      percentKey: 'percentVeryLow',
+      countKey: 'veryLow',
     },
     {
       label: 'Baixo',
@@ -85,17 +59,43 @@ function buildRanges(t: AlarmThresholds): RangeRow[] {
       countKey: 'low',
     },
     {
-      label: 'Muito Baixo',
-      range: `<${t.veryLow}`,
-      thresholdHigh: t.veryLow,
-      targetLabel: 'Menor que 1%',
-      targetPct: 1,
+      label: 'Alvo',
+      range: `${t.low}–${t.high}`,
+      thresholdLow: t.low, thresholdHigh: t.high,
+      targetLabel: 'Maior que 70%',
+      targetPct: 70,
+      targetOp: '>=',
+      color: '#22c55e',
+      bgColor: 'bg-green-500',
+      textColor: 'text-green-600 dark:text-green-400',
+      percentKey: 'percentInRange',
+      countKey: 'inRange',
+    },
+    {
+      label: 'Alto',
+      range: `${t.high}–${t.veryHigh}`,
+      thresholdLow: t.high, thresholdHigh: t.veryHigh,
+      targetLabel: 'Menor que 25%',
+      targetPct: 25,
+      targetOp: '<=',
+      color: '#f59e0b',
+      bgColor: 'bg-amber-500',
+      textColor: 'text-amber-500 dark:text-amber-400',
+      percentKey: 'percentHigh',
+      countKey: 'high',
+    },
+    {
+      label: 'Muito Alto',
+      range: `>${t.veryHigh}`,
+      thresholdLow: t.veryHigh,
+      targetLabel: 'Menor que 5%',
+      targetPct: 5,
       targetOp: '<=',
       color: '#dc2626',
-      bgColor: 'bg-red-700',
-      textColor: 'text-red-700 dark:text-red-400',
-      percentKey: 'percentVeryLow',
-      countKey: 'veryLow',
+      bgColor: 'bg-red-600',
+      textColor: 'text-red-600 dark:text-red-400',
+      percentKey: 'percentVeryHigh',
+      countKey: 'veryHigh',
     },
   ];
 }
@@ -125,7 +125,7 @@ function rangeLabel(seg: RangeRow, ul: string): string {
   return `${seg.range} ${ul}`;
 }
 
-export function TIRChart({ tir, loading, totalReadings }: Props) {
+export function TIRChart({ tir, loading }: Props) {
   const { unit, alarmThresholds } = useDashboardStore();
   const ul = unitLabel(unit);
   const RANGES = buildRanges(alarmThresholds);
@@ -158,18 +158,11 @@ export function TIRChart({ tir, loading, totalReadings }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base flex items-center justify-between">
-          <span>Tempo no Alvo (TIR)</span>
-          {totalReadings && (
-            <span className="text-xs font-normal text-muted-foreground">
-              {totalReadings} leituras
-            </span>
-          )}
-        </CardTitle>
+        <CardTitle className="text-base">Tempo no Alvo (TIR)</CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
 
-        {/* Stacked bar — order: veryHigh at left → veryLow at right */}
+        {/* Stacked bar — order: veryLow at left → veryHigh at right */}
         <div className="flex h-8 rounded-lg overflow-hidden mb-4">
           {RANGES.map((seg) => {
             const pct = tir[seg.percentKey] as number;
