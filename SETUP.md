@@ -1,6 +1,6 @@
 # Guia de Setup — Nightscout Modern
 
-> **v0.4** — Dashboard completo com configurações, thresholds configuráveis, conversão de unidades e alertas visuais.
+> **v0.3-beta** — Dashboard completo com gráficos interativos (zoom/pan), AGP clínico, comparação de períodos e TIR configurável.
 
 ## Pré-requisitos
 

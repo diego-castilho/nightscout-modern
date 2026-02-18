@@ -2,7 +2,7 @@
 
 Interface moderna, responsiva e rica em recursos para monitoramento contínuo de glicose (CGM), construída sobre o banco de dados MongoDB do Nightscout existente.
 
-> **v0.4** — Dashboard completo com configurações, alertas visuais, conversão de unidades e thresholds configuráveis.
+> **v0.3-beta** — Dashboard completo com gráficos interativos (zoom/pan), AGP clínico com estatísticas inline, comparação de períodos e TIR configurável.
 
 ---
 
@@ -43,10 +43,11 @@ Interface moderna, responsiva e rica em recursos para monitoramento contínuo de
 
 | Gráfico | Descrição |
 |---------|-----------|
-| **Leituras de Glicose** | AreaChart com gradiente dinâmico por zona TIR. Eixo X com ticks configurados por período. Tooltip com valor, seta de tendência e horário. Linhas de referência nos thresholds configurados. |
-| **Tempo no Alvo (TIR)** | Barra horizontal empilhada + tabela com metas internacionais, tempo/dia real e indicadores ✓/✗. Cálculo usa thresholds configurados pelo usuário. |
-| **Padrão Diário (AGP)** | Bandas de percentil P5–P25–P75–P95 + linha de mediana. Para ≤ 24h: timeline das últimas 24h com horas fora do período sombreadas. Para 7d+: padrão AGP clássico (00:00–23:00) com dados do período selecionado. Linhas de referência dinâmicas. |
-| **Cartão de Glicose Atual** | Valor em destaque (7xl) com cor por zona, seta de tendência, delta, badge de status e alerta de dados antigos. Suporte a mg/dL e mmol/L. |
+| **Leituras de Glicose** | AreaChart com gradiente dinâmico por zona TIR. Zoom via drag horizontal, double-click para resetar. Eixo X e Y adaptam ao intervalo visível. Tooltip com valor, seta de tendência e horário. |
+| **Tempo no Alvo (TIR)** | Barra empilhada (Muito Baixo → Muito Alto) + tabela com metas internacionais, tempo/dia real e indicadores ✓/✗. Ordem e cores refletem a progressão de risco. |
+| **Padrão Diário (AGP)** | Eixo fixo 00:00–23:00 (padrão clínico AGP). Bandas P5–P25–P75–P95 + mediana. Estatísticas inline: Média, GMI, CV%, % no Alvo com semáforo. |
+| **Comparação de Períodos** | Sobrepõe a média horária do período atual (verde) com o período anterior equivalente (cinza tracejado). Grade de estatísticas com delta arrows (↑↓→). Disponível para 24h/7d/14d/30d. Colapsável. |
+| **Cartão de Glicose Atual** | Valor em destaque com cor por zona, seta de tendência, delta, badge de status e alerta de dados antigos. Suporte a mg/dL e mmol/L. |
 | **Grid de Estatísticas** | 4 cards: Média · GMI · A1c Estimada · CV% com semáforo verde/amarelo/vermelho. |
 | **Alertas de Padrões** | Cards de alerta para padrões detectados com severidade (baixa/média/alta). |
 
@@ -65,8 +66,6 @@ Interface moderna, responsiva e rica em recursos para monitoramento contínuo de
 
 - Alarmes sonoros / Push Notifications (PWA)
 - Relatório PDF estilo AGP
-- Comparação de períodos
-- Zoom/pan no gráfico de glicose
 - Integração Claude AI via MCP LibreLink
 
 ---
@@ -275,12 +274,18 @@ Os limiares abaixo são os padrões internacionais. Todos são configuráveis na
 - Intervalo de auto-refresh configurável
 - Persistência no servidor (compartilhado entre dispositivos)
 
-### Fase 5 — Relatórios (próximo)
+### Fase 5 — UX Avançado ✅
+- Zoom/pan interativo no gráfico de glicose (drag + double-click reset)
+- AGP clínico com estatísticas inline (Média, GMI, CV%, TIR%)
+- Comparação de períodos (atual vs anterior, overlay AGP)
+- TIR reordenado de menor para maior risco
+
+### Fase 6 — Relatórios (próximo)
 - PDF estilo AGP
 - Resumo semanal
 - Export CSV
 
-### Fase 6 — Integrações
+### Fase 7 — Integrações
 - Claude AI via MCP LibreLink
 - Dados de loop (AndroidAPS / Loop)
 
