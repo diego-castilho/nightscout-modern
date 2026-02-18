@@ -3,7 +3,12 @@
 // Sobrepõe a mediana horária do período atual (verde) com o período
 // anterior equivalente (cinza tracejado) num eixo 00:00→23:00.
 // Exibe também uma grade de estatísticas comparativas com deltas.
-// Apenas visível para períodos 24h, 7d, 14d e 30d.
+//
+// Modos:
+//   fixedPeriod prop → modo autônomo (página de comparações): busca ambos os
+//     períodos internamente, sempre expandido, sem botão de colapso.
+//   sem fixedPeriod  → modo dashboard: recebe currentAnalytics via prop,
+//     busca período anterior ao expandir (comportamento original).
 // ============================================================================
 
 import { useState, useEffect } from 'react';
@@ -22,7 +27,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { getAnalytics } from '../../lib/api';
 import type { GlucoseAnalytics } from '../../lib/api';
-import { useDashboardStore, type Period } from '../../stores/dashboardStore';
+import { useDashboardStore, getPeriodDates, type Period } from '../../stores/dashboardStore';
 import { formatGlucose, unitLabel } from '../../lib/glucose';
 
 // Period labels and previous-period calculation
@@ -57,7 +62,8 @@ interface ComparisonPoint {
 }
 
 interface Props {
-  currentAnalytics: GlucoseAnalytics | null;
+  fixedPeriod?: '24h' | '7d' | '14d' | '30d'; // modo autônomo (página dedicada)
+  currentAnalytics?: GlucoseAnalytics | null;   // modo dashboard (passado pelo pai)
 }
 
 // Delta arrow + color helpers
@@ -110,38 +116,57 @@ function CustomTooltip({ active, payload, unit, labels }: CustomTooltipProps) {
   );
 }
 
-export function ComparisonChart({ currentAnalytics }: Props) {
-  const { period, lastRefresh, alarmThresholds, unit } = useDashboardStore();
-  const [isExpanded, setIsExpanded] = useState(false);
+export function ComparisonChart({ fixedPeriod, currentAnalytics }: Props) {
+  const { period: storePeriod, lastRefresh, alarmThresholds, unit } = useDashboardStore();
+
+  const period = fixedPeriod ?? storePeriod;
+  const isStandalone = !!fixedPeriod;
+
+  const [isExpanded, setIsExpanded] = useState(isStandalone);
   const [prevAnalytics, setPrevAnalytics] = useState<GlucoseAnalytics | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loadingPrev, setLoadingPrev] = useState(false);
+
+  // Standalone: fetch current period analytics internally
+  const [currentAnalyticsLocal, setCurrentAnalyticsLocal] = useState<GlucoseAnalytics | null>(null);
+  const [loadingCurrent, setLoadingCurrent] = useState(false);
 
   const labels = PERIOD_LABELS[period as Period];
 
-  // Reset prev data when period changes
+  // Reset data when period changes
   useEffect(() => {
     setPrevAnalytics(null);
-  }, [period]);
+    if (isStandalone) setCurrentAnalyticsLocal(null);
+  }, [period, isStandalone]);
 
-  // Fetch previous period analytics only when expanded
+  // Standalone mode: fetch current period
+  useEffect(() => {
+    if (!isStandalone) return;
+    let cancelled = false;
+    setLoadingCurrent(true);
+    const { startDate, endDate } = getPeriodDates(period as Period);
+    getAnalytics(startDate, endDate, alarmThresholds)
+      .then((data) => {
+        if (!cancelled) { setCurrentAnalyticsLocal(data ?? null); setLoadingCurrent(false); }
+      })
+      .catch(() => {
+        if (!cancelled) { setCurrentAnalyticsLocal(null); setLoadingCurrent(false); }
+      });
+    return () => { cancelled = true; };
+  }, [isStandalone, period, alarmThresholds, lastRefresh]);
+
+  // Fetch previous period analytics (dashboard: only when expanded; standalone: always)
   useEffect(() => {
     if (!isExpanded) return;
     let cancelled = false;
-    setLoading(true);
+    setLoadingPrev(true);
 
     const { startDate, endDate } = getPrevDates(period as Period);
     getAnalytics(startDate, endDate, alarmThresholds)
       .then((data) => {
-        if (!cancelled) {
-          setPrevAnalytics(data ?? null);
-          setLoading(false);
-        }
+        if (!cancelled) { setPrevAnalytics(data ?? null); setLoadingPrev(false); }
       })
       .catch(() => {
-        if (!cancelled) {
-          setPrevAnalytics(null);
-          setLoading(false);
-        }
+        if (!cancelled) { setPrevAnalytics(null); setLoadingPrev(false); }
       });
 
     return () => { cancelled = true; };
@@ -149,8 +174,11 @@ export function ComparisonChart({ currentAnalytics }: Props) {
 
   if (!labels) return null; // Only for 24h/7d/14d/30d
 
+  const resolvedCurrentAnalytics = isStandalone ? currentAnalyticsLocal : (currentAnalytics ?? null);
+  const isLoading = loadingPrev || (isStandalone && loadingCurrent);
+
   // Build chart data (00:00–23:00 axis)
-  const currentPatterns = currentAnalytics?.dailyPatterns ?? [];
+  const currentPatterns = resolvedCurrentAnalytics?.dailyPatterns ?? [];
   const prevPatterns    = prevAnalytics?.dailyPatterns ?? [];
 
   const chartData: ComparisonPoint[] = Array.from({ length: 24 }, (_, h) => {
@@ -168,9 +196,9 @@ export function ComparisonChart({ currentAnalytics }: Props) {
   const yTicks = [0, alarmThresholds.veryLow, alarmThresholds.low, alarmThresholds.high, alarmThresholds.veryHigh, 350];
 
   // Stats comparison
-  const curStats  = currentAnalytics?.stats;
+  const curStats  = resolvedCurrentAnalytics?.stats;
   const prevStats = prevAnalytics?.stats;
-  const curTIR    = currentAnalytics?.timeInRange;
+  const curTIR    = resolvedCurrentAnalytics?.timeInRange;
   const prevTIR   = prevAnalytics?.timeInRange;
   const ul = unitLabel(unit);
 
@@ -203,10 +231,10 @@ export function ComparisonChart({ currentAnalytics }: Props) {
 
   return (
     <Card>
-      {/* Header — clickable toggle */}
+      {/* Header — clicável no modo dashboard, estático no modo standalone */}
       <CardHeader
-        className="pb-2 cursor-pointer select-none"
-        onClick={() => setIsExpanded((v) => !v)}
+        className={`pb-2 ${!isStandalone ? 'cursor-pointer select-none' : ''}`}
+        onClick={!isStandalone ? () => setIsExpanded((v) => !v) : undefined}
       >
         <CardTitle className="text-base flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -215,20 +243,21 @@ export function ComparisonChart({ currentAnalytics }: Props) {
               {labels.current} vs {labels.previous}
             </span>
           </div>
-          {isExpanded
-            ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
-            : <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          }
+          {!isStandalone && (
+            isExpanded
+              ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
+              : <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          )}
         </CardTitle>
       </CardHeader>
 
       {isExpanded && (
         <CardContent className="pt-0">
-          {loading && (
+          {isLoading && (
             <div className="h-48 bg-muted animate-pulse rounded-md mb-4" />
           )}
 
-          {!loading && (
+          {!isLoading && (
             <>
               {/* Stats comparison grid */}
               {statsRows ? (

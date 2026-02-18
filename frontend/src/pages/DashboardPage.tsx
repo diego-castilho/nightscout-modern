@@ -4,7 +4,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useGlucoseData } from '../hooks/useGlucoseData';
-import { useDashboardStore, getPeriodDates, type Period } from '../stores/dashboardStore';
+import { useDashboardStore, getPeriodDates } from '../stores/dashboardStore';
 import { detectPatterns } from '../lib/api';
 import { formatGlucose, unitLabel } from '../lib/glucose';
 import type { DetectedPattern } from '../lib/api';
@@ -16,7 +16,6 @@ import { PatternsAlert } from '../components/dashboard/PatternsAlert';
 import { GlucoseAreaChart } from '../components/charts/GlucoseAreaChart';
 import { TIRChart } from '../components/charts/TIRChart';
 import { DailyPatternChart } from '../components/charts/DailyPatternChart';
-import { ComparisonChart } from '../components/charts/ComparisonChart';
 
 import { Button } from '../components/ui/button';
 import { AlertCircle, X } from 'lucide-react';
@@ -148,11 +147,6 @@ export function DashboardPage() {
 
         {/* Main chart */}
         <GlucoseAreaChart entries={entries} loading={loading} />
-
-        {/* Period comparison (only for 24h/7d/14d/30d) */}
-        {(['24h', '7d', '14d', '30d'] as Period[]).includes(period) && (
-          <ComparisonChart currentAnalytics={analytics} />
-        )}
 
         {/* Stats grid */}
         <StatsGrid analytics={analytics} loading={loading} />

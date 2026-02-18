@@ -2,8 +2,9 @@
 // Header - Top navigation bar
 // ============================================================================
 
+import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Moon, Sun, RefreshCw, Activity, Settings, ArrowLeft } from 'lucide-react';
+import { Moon, Sun, RefreshCw, Activity, Settings, ArrowLeft, Menu, BarChart2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useTheme } from '../../hooks/useTheme';
 import { useDashboardStore } from '../../stores/dashboardStore';
@@ -17,7 +18,20 @@ export function Header({ lastUpdated }: HeaderProps) {
   const { triggerRefresh, patientName } = useDashboardStore();
   const location = useLocation();
   const navigate = useNavigate();
-  const isSettings = location.pathname === '/settings';
+  const isSubpage = ['/settings', '/comparisons'].includes(location.pathname);
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    if (menuOpen) document.addEventListener('mousedown', onOutside);
+    return () => document.removeEventListener('mousedown', onOutside);
+  }, [menuOpen]);
 
   const formatLastUpdated = (date: Date | null | undefined) => {
     if (!date) return '';
@@ -29,7 +43,7 @@ export function Header({ lastUpdated }: HeaderProps) {
       <div className="container mx-auto flex h-14 items-center justify-between px-4">
         {/* Logo / Back button */}
         <div className="flex items-center gap-2">
-          {isSettings ? (
+          {isSubpage ? (
             <Link to="/" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
               <ArrowLeft className="h-4 w-4" />
               <span>Dashboard</span>
@@ -49,13 +63,13 @@ export function Header({ lastUpdated }: HeaderProps) {
 
         {/* Right side actions */}
         <div className="flex items-center gap-2">
-          {!isSettings && lastUpdated && (
+          {!isSubpage && lastUpdated && (
             <span className="text-xs text-muted-foreground hidden sm:block">
               Atualizado às {formatLastUpdated(lastUpdated)}
             </span>
           )}
 
-          {!isSettings && (
+          {!isSubpage && (
             <Button
               variant="ghost"
               size="icon"
@@ -75,10 +89,35 @@ export function Header({ lastUpdated }: HeaderProps) {
             {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
 
-          {!isSettings && (
-            <Button variant="ghost" size="icon" onClick={() => navigate('/settings')} title="Configurações">
-              <Settings className="h-4 w-4" />
-            </Button>
+          {!isSubpage && (
+            <div className="relative" ref={menuRef}>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setMenuOpen((v) => !v)}
+                title="Menu"
+              >
+                <Menu className="h-4 w-4" />
+              </Button>
+              {menuOpen && (
+                <div className="absolute right-0 top-full mt-1 bg-background border border-border rounded-md shadow-lg py-1 min-w-[170px] z-50">
+                  <button
+                    onClick={() => { navigate('/comparisons'); setMenuOpen(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors text-left"
+                  >
+                    <BarChart2 className="h-4 w-4" />
+                    Comparações
+                  </button>
+                  <button
+                    onClick={() => { navigate('/settings'); setMenuOpen(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors text-left"
+                  >
+                    <Settings className="h-4 w-4" />
+                    Configurações
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
