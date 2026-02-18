@@ -9,6 +9,7 @@ import { useDashboardStore } from '../../stores/dashboardStore';
 import type { AlarmThresholds } from '../../stores/dashboardStore';
 import type { GlucoseEntry } from '../../lib/api';
 import { useIOB } from '../../hooks/useIOB';
+import { useCOB } from '../../hooks/useCOB';
 
 interface Props {
   latest: GlucoseEntry | null;
@@ -59,6 +60,7 @@ function classifyGlucose(sgv: number, t: AlarmThresholds): keyof typeof LEVEL_CO
 export function CurrentGlucoseCard({ latest, loading }: Props) {
   const { unit, alarmThresholds } = useDashboardStore();
   const iob = useIOB();
+  const cob = useCOB();
   if (loading) {
     return (
       <Card>
@@ -123,14 +125,23 @@ export function CurrentGlucoseCard({ latest, loading }: Props) {
                 {config.label}
               </span>
             </div>
-            {/* IOB pill — only shown when there is active insulin */}
-            {iob >= 0.05 && (
-              <div className="mt-2 flex justify-center">
-                <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5
-                                 rounded-full bg-blue-100 text-blue-700
-                                 dark:bg-blue-900/40 dark:text-blue-300">
-                  💉 IOB {iob.toFixed(2)} U
-                </span>
+            {/* IOB / COB pills — only shown when there are active values */}
+            {(iob >= 0.05 || cob >= 0.5) && (
+              <div className="mt-2 flex justify-center gap-2 flex-wrap">
+                {iob >= 0.05 && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5
+                                   rounded-full bg-blue-100 text-blue-700
+                                   dark:bg-blue-900/40 dark:text-blue-300">
+                    💉 IOB {iob.toFixed(2)} U
+                  </span>
+                )}
+                {cob >= 0.5 && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5
+                                   rounded-full bg-orange-100 text-orange-700
+                                   dark:bg-orange-900/40 dark:text-orange-300">
+                    🍞 COB {cob.toFixed(1)} g
+                  </span>
+                )}
               </div>
             )}
           </div>

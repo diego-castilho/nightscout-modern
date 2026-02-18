@@ -29,6 +29,17 @@ const REFRESH_OPTIONS = [
   { value: 30, label: '30 minutos' },
 ];
 
+const CARB_ABSORPTION_OPTIONS = [
+  { value: 10, label: '10 g/h (muito lento)' },
+  { value: 15, label: '15 g/h (lento)' },
+  { value: 20, label: '20 g/h' },
+  { value: 25, label: '25 g/h' },
+  { value: 30, label: '30 g/h (padrão)' },
+  { value: 35, label: '35 g/h' },
+  { value: 40, label: '40 g/h (rápido)' },
+  { value: 50, label: '50 g/h (muito rápido)' },
+];
+
 const DIA_OPTIONS = [
   { value: 2,   label: '2 horas' },
   { value: 2.5, label: '2,5 horas' },
@@ -47,6 +58,7 @@ export function SettingsPage() {
     refreshInterval, setRefreshInterval,
     alarmThresholds, setAlarmThresholds,
     dia, setDia,
+    carbAbsorptionRate, setCarbAbsorptionRate,
   } = useDashboardStore();
 
   // Local threshold state (shown in selected unit)
@@ -84,6 +96,11 @@ export function SettingsPage() {
   function handleDiaChange(hours: number) {
     setDia(hours);
     saveSettings({ dia: hours }).catch(() => {});
+  }
+
+  function handleCarbAbsorptionRateChange(gPerHour: number) {
+    setCarbAbsorptionRate(gPerHour);
+    saveSettings({ carbAbsorptionRate: gPerHour }).catch(() => {});
   }
 
   function handleThresholdChange(
@@ -257,6 +274,29 @@ export function SettingsPage() {
               <p className="text-xs text-muted-foreground">
                 Usado para calcular o IOB (Insulina Ativa). Varia por tipo de insulina:
                 análogos rápidos ~3h, regular ~5h.
+              </p>
+            </div>
+
+            {/* Carb absorption rate */}
+            <div className="space-y-1.5">
+              <Label htmlFor="carbAbsorptionRate">
+                🍞 Taxa de absorção de carboidratos
+              </Label>
+              <Select
+                id="carbAbsorptionRate"
+                value={String(carbAbsorptionRate)}
+                onChange={(e) => handleCarbAbsorptionRateChange(Number(e.target.value))}
+                className="max-w-[220px]"
+              >
+                {CARB_ABSORPTION_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Usado para calcular o COB (Carboidratos Ativos). Carboidratos simples
+                absorvem mais rápido; refeições com gordura/proteína, mais devagar.
               </p>
             </div>
           </CardContent>

@@ -201,6 +201,7 @@ export interface AppSettings {
   patientName?: string;
   refreshInterval?: number;
   dia?: number;
+  carbAbsorptionRate?: number;
   alarmThresholds?: {
     veryLow: number;
     low: number;

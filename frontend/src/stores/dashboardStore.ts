@@ -29,7 +29,8 @@ interface DashboardState {
   unit: GlucoseUnit;
   patientName: string;
   refreshInterval: number; // minutes
-  dia: number;            // Duration of Insulin Action, hours (IOB calculation)
+  dia: number;             // Duration of Insulin Action, hours (IOB calculation)
+  carbAbsorptionRate: number; // g/hour for COB calculation (default 30)
   setPeriod: (period: Period) => void;
   toggleDarkMode: () => void;
   triggerRefresh: () => void;
@@ -38,6 +39,7 @@ interface DashboardState {
   setPatientName: (name: string) => void;
   setRefreshInterval: (minutes: number) => void;
   setDia: (hours: number) => void;
+  setCarbAbsorptionRate: (gPerHour: number) => void;
   initFromServer: (settings: AppSettings) => void;
 }
 
@@ -52,6 +54,7 @@ export const useDashboardStore = create<DashboardState>()(
       patientName: '',
       refreshInterval: 5,
       dia: 3,
+      carbAbsorptionRate: 30,
 
       setPeriod: (period) => set({ period }),
 
@@ -78,12 +81,15 @@ export const useDashboardStore = create<DashboardState>()(
 
       setDia: (dia) => set({ dia }),
 
+      setCarbAbsorptionRate: (carbAbsorptionRate) => set({ carbAbsorptionRate }),
+
       initFromServer: (settings) => set((state) => ({
         unit:            settings.unit            ?? state.unit,
         patientName:     settings.patientName     ?? state.patientName,
         refreshInterval: settings.refreshInterval ?? state.refreshInterval,
         alarmThresholds: settings.alarmThresholds ?? state.alarmThresholds,
-        dia:             settings.dia             ?? state.dia,
+        dia:                settings.dia                ?? state.dia,
+        carbAbsorptionRate: settings.carbAbsorptionRate ?? state.carbAbsorptionRate,
       })),
     }),
     {
@@ -95,7 +101,8 @@ export const useDashboardStore = create<DashboardState>()(
         unit:            state.unit,
         patientName:     state.patientName,
         refreshInterval: state.refreshInterval,
-        dia:             state.dia,
+        dia:                state.dia,
+        carbAbsorptionRate: state.carbAbsorptionRate,
       }),
     }
   )
