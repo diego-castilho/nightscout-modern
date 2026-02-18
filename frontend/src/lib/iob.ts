@@ -12,12 +12,19 @@
 //   t ≤ peak : fraction = 1  - (t / DIA) * (1 / (2*(1 - peak/DIA)))
 //   t > peak : fraction = (DIA - t) / (DIA - peak) * (peak / DIA) * 0.5
 //
-// Only bolus treatments are counted (Meal Bolus and Correction Bolus).
+// Bolus treatments (Meal Bolus, Correction Bolus) are counted directly.
+//
+// Temp Basal is counted as the DEVIATION from the scheduled basal rate, modelled
+// as a stream of 5-minute micro-boluses (standard Nightscout/Loop approach).
+// Each micro-bolus has size  deviation_U/h × (5/60) h  and decays via iobFraction.
+// IOB can be negative when a Temp Basal suspends or reduces the scheduled rate.
+// Temp Basal IOB is only calculated when scheduledBasalRate > 0.
 // ============================================================================
 
 import type { Treatment } from './api';
 
-const PEAK_MINUTES = 75; // rapid-acting insulin peak activity time
+const PEAK_MINUTES   = 75;          // rapid-acting insulin peak activity time
+const SEGMENT_MS     = 5 * 60_000; // 5-minute micro-segment for Temp Basal
 
 /**
  * Returns the fraction of a bolus dose still active at `elapsedMs` ms after injection.
@@ -45,24 +52,77 @@ function iobFraction(elapsedMs: number, diaMs: number): number {
 }
 
 /**
- * Calculates total Insulin on Board from a list of treatments.
- * Only treatments with insulin > 0 are counted (Meal Bolus, Correction Bolus).
- *
- * @param treatments - list of recent treatments (at least `diaHours` old)
- * @param diaHours   - Duration of Insulin Action in hours
- * @returns IOB in units (U), rounded to 2 decimal places
+ * Calculates Temp Basal IOB as the sum of 5-minute deviation micro-boluses.
+ * deviation = actualRate - scheduledBasalRate (can be negative for suspend/reduce).
  */
-export function calculateIOB(treatments: Treatment[], diaHours: number): number {
+function calculateTempBasalIOB(
+  treatments: Treatment[],
+  diaMs: number,
+  scheduledBasalRate: number,
+): number {
+  const now = Date.now();
+
+  return treatments.reduce((total, t) => {
+    if (t.eventType !== 'Temp Basal') return total;
+    if (t.rate == null || !t.duration) return total;
+
+    // Convert relative (%) to absolute U/h
+    const actualRate = t.rateMode === 'relative'
+      ? (t.rate / 100) * scheduledBasalRate
+      : t.rate;
+
+    const deviation = actualRate - scheduledBasalRate;
+    if (Math.abs(deviation) < 0.001) return total; // negligible
+
+    const startTime    = new Date(t.created_at).getTime();
+    const endTime      = startTime + t.duration * 60_000;
+    const deliveredEnd = Math.min(now, endTime);
+    if (deliveredEnd <= startTime) return total;
+
+    let iob = 0;
+    for (let seg = startTime; seg < deliveredEnd; seg += SEGMENT_MS) {
+      const segEnd      = Math.min(seg + SEGMENT_MS, deliveredEnd);
+      const segMid      = (seg + segEnd) / 2;
+      const segDuration = (segEnd - seg) / 3_600_000; // hours
+      const segInsulin  = deviation * segDuration;     // U (positive or negative)
+      const elapsed     = now - segMid;
+      if (elapsed > 0) {
+        iob += segInsulin * iobFraction(elapsed, diaMs);
+      }
+    }
+    return total + iob;
+  }, 0);
+}
+
+/**
+ * Calculates total Insulin on Board from a list of treatments.
+ *
+ * Bolus IOB: treatments with insulin > 0 (Meal Bolus, Correction Bolus).
+ * Temp Basal IOB: deviation model — only when scheduledBasalRate > 0.
+ *
+ * @param treatments         - list of recent treatments (covering at least `diaHours`)
+ * @param diaHours           - Duration of Insulin Action in hours
+ * @param scheduledBasalRate - Pump scheduled basal rate in U/h (0 = disabled)
+ * @returns IOB in units (U), rounded to 2 decimal places (may be negative)
+ */
+export function calculateIOB(
+  treatments: Treatment[],
+  diaHours: number,
+  scheduledBasalRate = 0,
+): number {
   const now   = Date.now();
   const diaMs = diaHours * 3_600_000;
 
-  const total = treatments.reduce((sum, t) => {
+  const bolusIOB = treatments.reduce((sum, t) => {
     const insulin = t.insulin;
     if (!insulin || insulin <= 0) return sum;
-
     const elapsed = now - new Date(t.created_at).getTime();
     return sum + insulin * iobFraction(elapsed, diaMs);
   }, 0);
 
-  return Math.round(total * 100) / 100;
+  const basalIOB = scheduledBasalRate > 0
+    ? calculateTempBasalIOB(treatments, diaMs, scheduledBasalRate)
+    : 0;
+
+  return Math.round((bolusIOB + basalIOB) * 100) / 100;
 }

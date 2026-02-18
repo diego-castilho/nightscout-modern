@@ -18,6 +18,14 @@ const REQUIRED_FIELDS: Record<string, string[]> = {
   'Carb Correction':   ['carbs'],
   'BG Check':          ['glucose'],
   'Note':              ['notes'],
+  // Device / consumable age tracking — no required fields beyond eventType + created_at
+  'Sensor Change':     [],
+  'Site Change':       [],
+  'Insulin Change':    [],  // IAGE — generic (pump reservoir, vial or undifferentiated pen)
+  'Basal Pen Change':  [],
+  'Rapid Pen Change':  [],
+  // Pump-specific
+  'Temp Basal':        ['rate', 'duration'],
 };
 
 const VALID_EVENT_TYPES = Object.keys(REQUIRED_FIELDS);
@@ -57,7 +65,8 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { eventType, created_at, timestamp, glucose, carbs, insulin,
-            protein, fat, notes, units, glucoseType, enteredBy, duration } = req.body;
+            protein, fat, notes, units, glucoseType, enteredBy, duration,
+            rate, rateMode } = req.body;
 
     // Validar tipo de evento
     if (!eventType || !VALID_EVENT_TYPES.includes(eventType)) {
@@ -70,7 +79,7 @@ router.post('/', async (req, res) => {
 
     // Validar campos obrigatórios por tipo
     const required = REQUIRED_FIELDS[eventType] ?? [];
-    const bodyMap: Record<string, unknown> = { glucose, carbs, insulin, notes };
+    const bodyMap: Record<string, unknown> = { glucose, carbs, insulin, notes, rate, duration };
     const missing = required.filter((f) => bodyMap[f] == null || bodyMap[f] === '');
     if (missing.length > 0) {
       return res.status(400).json({
@@ -94,6 +103,8 @@ router.post('/', async (req, res) => {
     if (protein      != null) doc.protein      = Number(protein);
     if (fat          != null) doc.fat          = Number(fat);
     if (duration     != null) doc.duration     = Number(duration);
+    if (rate         != null) doc.rate         = Number(rate);
+    if (rateMode     != null) doc.rateMode     = String(rateMode);
     if (notes        != null) doc.notes        = String(notes);
     if (units        != null) doc.units        = units;
 

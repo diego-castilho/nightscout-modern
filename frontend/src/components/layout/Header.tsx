@@ -4,11 +4,13 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Moon, Sun, RefreshCw, Activity, Settings, ArrowLeft, Menu, BarChart2, Plus, Syringe } from 'lucide-react';
+import { Moon, Sun, RefreshCw, Activity, Settings, ArrowLeft, Menu, BarChart2, Plus, Syringe, Calculator } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useTheme } from '../../hooks/useTheme';
 import { useDashboardStore } from '../../stores/dashboardStore';
 import { TreatmentModal } from '../careportal/TreatmentModal';
+import { BolusCalculatorModal } from '../careportal/BolusCalculatorModal';
+import type { EventTypeValue } from '../careportal/TreatmentModal';
 
 interface HeaderProps {
   lastUpdated?: Date | null;
@@ -21,8 +23,15 @@ export function Header({ lastUpdated }: HeaderProps) {
   const navigate = useNavigate();
   const isSubpage = ['/settings', '/comparisons', '/treatments'].includes(location.pathname);
 
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuOpen,  setMenuOpen]  = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [calcOpen,  setCalcOpen]  = useState(false);
+  const [treatInitialValues, setTreatInitialValues] = useState<{
+    eventType?: EventTypeValue;
+    insulin?:   string;
+    carbs?:     string;
+    glucose?:   string;
+  } | undefined>(undefined);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -80,6 +89,18 @@ export function Header({ lastUpdated }: HeaderProps) {
                 title="Atualizar dados"
               >
                 <RefreshCw className="h-4 w-4" />
+              </Button>
+            )}
+
+            {/* Botão da calculadora de bolus — visível apenas fora de subpages */}
+            {!isSubpage && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setCalcOpen(true)}
+                title="Calculadora de Bolus"
+              >
+                <Calculator className="h-4 w-4" />
               </Button>
             )}
 
@@ -145,11 +166,24 @@ export function Header({ lastUpdated }: HeaderProps) {
         </div>
       </header>
 
+      {/* Calculadora de bolus */}
+      {calcOpen && (
+        <BolusCalculatorModal
+          onClose={() => setCalcOpen(false)}
+          onRegister={(eventType, values) => {
+            setTreatInitialValues({ eventType, ...values });
+            setCalcOpen(false);
+            setModalOpen(true);
+          }}
+        />
+      )}
+
       {/* Modal de tratamento — renderizado fora do header para z-index correto */}
       {modalOpen && (
         <TreatmentModal
-          onClose={() => setModalOpen(false)}
-          onSuccess={() => triggerRefresh()}
+          onClose={() => { setModalOpen(false); setTreatInitialValues(undefined); }}
+          onSuccess={() => { triggerRefresh(); setTreatInitialValues(undefined); }}
+          initialValues={treatInitialValues}
         />
       )}
     </>

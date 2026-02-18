@@ -6,6 +6,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { GlucoseUnit } from '../lib/glucose';
 import type { AppSettings } from '../lib/api';
+import { DEFAULT_DEVICE_AGE_THRESHOLDS } from '../lib/deviceAge';
+import type { DeviceAgeThresholds } from '../lib/deviceAge';
 
 export type Period = '1h' | '3h' | '6h' | '12h' | '24h' | '7d' | '14d' | '30d';
 
@@ -31,6 +33,12 @@ interface DashboardState {
   refreshInterval: number; // minutes
   dia: number;             // Duration of Insulin Action, hours (IOB calculation)
   carbAbsorptionRate: number; // g/hour for COB calculation (default 30)
+  deviceAgeThresholds: DeviceAgeThresholds;
+  scheduledBasalRate: number; // Pump scheduled basal rate U/h (0 = not configured / MDI user)
+  isf:          number;    // Insulin Sensitivity Factor mg/dL per U (default 50)
+  icr:          number;    // Insulin-to-Carb Ratio g per U (default 15)
+  targetBG:     number;    // Target blood glucose mg/dL (default 100)
+  rapidPenStep: 0.5 | 1;  // Rapid pen dosing increment in U (default 1)
   setPeriod: (period: Period) => void;
   toggleDarkMode: () => void;
   triggerRefresh: () => void;
@@ -40,6 +48,12 @@ interface DashboardState {
   setRefreshInterval: (minutes: number) => void;
   setDia: (hours: number) => void;
   setCarbAbsorptionRate: (gPerHour: number) => void;
+  setDeviceAgeThresholds: (t: DeviceAgeThresholds) => void;
+  setScheduledBasalRate: (rate: number) => void;
+  setIsf:          (isf:          number)    => void;
+  setIcr:          (icr:          number)    => void;
+  setTargetBG:     (targetBG:     number)    => void;
+  setRapidPenStep: (step: 0.5 | 1)           => void;
   initFromServer: (settings: AppSettings) => void;
 }
 
@@ -55,6 +69,12 @@ export const useDashboardStore = create<DashboardState>()(
       refreshInterval: 5,
       dia: 3,
       carbAbsorptionRate: 30,
+      deviceAgeThresholds: DEFAULT_DEVICE_AGE_THRESHOLDS,
+      scheduledBasalRate: 0,
+      isf:          50,
+      icr:          15,
+      targetBG:     100,
+      rapidPenStep: 1,
 
       setPeriod: (period) => set({ period }),
 
@@ -83,13 +103,32 @@ export const useDashboardStore = create<DashboardState>()(
 
       setCarbAbsorptionRate: (carbAbsorptionRate) => set({ carbAbsorptionRate }),
 
+      setDeviceAgeThresholds: (deviceAgeThresholds) => set({ deviceAgeThresholds }),
+
+      setScheduledBasalRate: (scheduledBasalRate) => set({ scheduledBasalRate }),
+
+      setIsf:          (isf)          => set({ isf }),
+      setIcr:          (icr)          => set({ icr }),
+      setTargetBG:     (targetBG)     => set({ targetBG }),
+      setRapidPenStep: (rapidPenStep) => set({ rapidPenStep }),
+
       initFromServer: (settings) => set((state) => ({
         unit:            settings.unit            ?? state.unit,
         patientName:     settings.patientName     ?? state.patientName,
         refreshInterval: settings.refreshInterval ?? state.refreshInterval,
         alarmThresholds: settings.alarmThresholds ?? state.alarmThresholds,
-        dia:                settings.dia                ?? state.dia,
-        carbAbsorptionRate: settings.carbAbsorptionRate ?? state.carbAbsorptionRate,
+        dia:                    settings.dia                    ?? state.dia,
+        carbAbsorptionRate:     settings.carbAbsorptionRate     ?? state.carbAbsorptionRate,
+        // Spread defaults + current state + server values so new fields are
+        // always present even when loading an older server-side config.
+        deviceAgeThresholds: settings.deviceAgeThresholds
+          ? { ...DEFAULT_DEVICE_AGE_THRESHOLDS, ...state.deviceAgeThresholds, ...settings.deviceAgeThresholds }
+          : state.deviceAgeThresholds,
+        scheduledBasalRate: settings.scheduledBasalRate ?? state.scheduledBasalRate,
+        isf:          settings.isf          ?? state.isf,
+        icr:          settings.icr          ?? state.icr,
+        targetBG:     settings.targetBG     ?? state.targetBG,
+        rapidPenStep: settings.rapidPenStep ?? state.rapidPenStep,
       })),
     }),
     {
@@ -101,8 +140,14 @@ export const useDashboardStore = create<DashboardState>()(
         unit:            state.unit,
         patientName:     state.patientName,
         refreshInterval: state.refreshInterval,
-        dia:                state.dia,
-        carbAbsorptionRate: state.carbAbsorptionRate,
+        dia:                 state.dia,
+        carbAbsorptionRate:  state.carbAbsorptionRate,
+        deviceAgeThresholds: state.deviceAgeThresholds,
+        scheduledBasalRate:  state.scheduledBasalRate,
+        isf:          state.isf,
+        icr:          state.icr,
+        targetBG:     state.targetBG,
+        rapidPenStep: state.rapidPenStep,
       }),
     }
   )

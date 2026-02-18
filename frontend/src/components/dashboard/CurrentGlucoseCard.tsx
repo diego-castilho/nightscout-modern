@@ -2,6 +2,9 @@
 // CurrentGlucoseCard - Main glucose reading display
 // ============================================================================
 
+import { useState } from 'react';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { Card, CardContent } from '../ui/card';
 import { getTrendArrow, getTrendDescription } from '../../lib/utils';
 import { formatGlucose as fmtGlucose, unitLabel } from '../../lib/glucose';
@@ -10,6 +13,8 @@ import type { AlarmThresholds } from '../../stores/dashboardStore';
 import type { GlucoseEntry } from '../../lib/api';
 import { useIOB } from '../../hooks/useIOB';
 import { useCOB } from '../../hooks/useCOB';
+import { useDeviceAges } from '../../hooks/useDeviceAges';
+import type { AgeLevel, DeviceAge } from '../../lib/deviceAge';
 
 interface Props {
   latest: GlucoseEntry | null;
@@ -57,10 +62,70 @@ function classifyGlucose(sgv: number, t: AlarmThresholds): keyof typeof LEVEL_CO
   return 'veryHigh';
 }
 
+const AGE_PILL_CLASS: Record<AgeLevel, string> = {
+  ok:      'bg-slate-100 text-slate-600 dark:bg-slate-700/60 dark:text-slate-300',
+  warn:    'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+  urgent:  'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+  unknown: '',
+};
+
+// ── Device age pill with hover tooltip ────────────────────────────────────────
+
+interface AgePillProps {
+  deviceLabel: string;
+  age: DeviceAge;
+}
+
+function AgePill({ deviceLabel, age }: AgePillProps) {
+  const [visible, setVisible] = useState(false);
+
+  const dateStr = age.createdAt
+    ? format(new Date(age.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
+    : null;
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => setVisible(true)}
+      onMouseLeave={() => setVisible(false)}
+    >
+      <span
+        className={`inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full
+                    cursor-default select-none ${AGE_PILL_CLASS[age.level]}`}
+      >
+        {deviceLabel} {age.label}
+      </span>
+
+      {visible && age.createdAt && (
+        <div className="absolute left-0 top-full mt-1.5 z-50
+                        bg-popover border border-border rounded-lg shadow-xl
+                        p-2.5 text-xs min-w-[175px] whitespace-nowrap">
+          <p className="font-semibold mb-1.5">{deviceLabel}</p>
+          <div className="space-y-0.5 text-muted-foreground">
+            <p>Trocado: <span className="text-foreground">{dateStr}</span></p>
+            <p>Duração: <span className="text-foreground">{age.label}</span></p>
+            {age.notes && (
+              <p className="mt-1 italic text-foreground/70 whitespace-normal max-w-[200px]">
+                {age.notes}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main card ─────────────────────────────────────────────────────────────────
+
 export function CurrentGlucoseCard({ latest, loading }: Props) {
   const { unit, alarmThresholds } = useDashboardStore();
   const iob = useIOB();
   const cob = useCOB();
+  const { sage, cage, iage, basalPen, rapidPen } = useDeviceAges();
+
+  const hasDeviceAges = sage.hours != null || cage.hours != null || iage.hours != null || basalPen.hours != null || rapidPen.hours != null;
+
   if (loading) {
     return (
       <Card>
@@ -107,14 +172,33 @@ export function CurrentGlucoseCard({ latest, loading }: Props) {
       <CardContent className="pt-6 pb-6">
         <div className="flex items-center justify-between gap-4">
 
-          {/* Left: stale warning or empty spacer */}
-          <div className="min-w-[80px]">
+          {/* Left: device age pills + stale warning */}
+          <div className="min-w-[90px] flex flex-col items-start gap-1.5">
             {isStale && (
               <p className="text-xs font-medium text-red-500">⚠️ Dados antigos</p>
             )}
+            {hasDeviceAges && (
+              <>
+                {sage.hours != null && (
+                  <AgePill deviceLabel="Sensor" age={sage} />
+                )}
+                {cage.hours != null && (
+                  <AgePill deviceLabel="Site" age={cage} />
+                )}
+                {iage.hours != null && (
+                  <AgePill deviceLabel="Insulina" age={iage} />
+                )}
+                {basalPen.hours != null && (
+                  <AgePill deviceLabel="Basal" age={basalPen} />
+                )}
+                {rapidPen.hours != null && (
+                  <AgePill deviceLabel="Rápida" age={rapidPen} />
+                )}
+              </>
+            )}
           </div>
 
-          {/* Center: main glucose value */}
+          {/* Center: main glucose value + IOB/COB */}
           <div className="flex-1 text-center">
             <div className={`text-7xl font-bold tabular-nums tracking-tight ${config.textClass}`}>
               {fmtGlucose(latest.sgv, unit)}

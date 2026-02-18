@@ -208,6 +208,19 @@ export interface AppSettings {
     high: number;
     veryHigh: number;
   };
+  deviceAgeThresholds?: {
+    sageWarnD?:   number;
+    sageUrgentD?: number;
+    cageWarnH?:   number;
+    cageUrgentH?: number;
+    penWarnD?:    number;
+    penUrgentD?:  number;
+  };
+  scheduledBasalRate?: number;
+  isf?:          number;    // Insulin Sensitivity Factor mg/dL per U
+  icr?:          number;    // Insulin-to-Carb Ratio g per U
+  targetBG?:     number;    // Target blood glucose mg/dL
+  rapidPenStep?: 0.5 | 1;  // Rapid pen dosing increment in U
 }
 
 export async function getSettings(): Promise<AppSettings | null> {
@@ -238,6 +251,8 @@ export interface Treatment {
   duration?: number;
   protein?: number;
   fat?: number;
+  rate?:     number;                    // U/h (absolute) or % (relative) — Temp Basal
+  rateMode?: 'absolute' | 'relative';  // Temp Basal rate mode
 }
 
 export async function getTreatments(params?: {

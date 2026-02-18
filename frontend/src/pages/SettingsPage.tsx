@@ -14,7 +14,9 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select } from '../components/ui/select';
 import { Button } from '../components/ui/button';
-import { User, SlidersHorizontal, RefreshCw, RotateCcw, Syringe } from 'lucide-react';
+import { User, SlidersHorizontal, RefreshCw, RotateCcw, Syringe, Timer, Activity, Calculator } from 'lucide-react';
+import { DEFAULT_DEVICE_AGE_THRESHOLDS } from '../lib/deviceAge';
+import type { DeviceAgeThresholds } from '../lib/deviceAge';
 
 const DEFAULT_THRESHOLDS_MGDL: AlarmThresholds = {
   veryLow: 54, low: 70, high: 180, veryHigh: 250,
@@ -40,6 +42,57 @@ const CARB_ABSORPTION_OPTIONS = [
   { value: 50, label: '50 g/h (muito rápido)' },
 ];
 
+const SAGE_WARN_OPTIONS = [
+  { value: 7,  label: '7 dias (1 semana)' },
+  { value: 10, label: '10 dias — padrão' },
+  { value: 12, label: '12 dias' },
+  { value: 14, label: '14 dias (2 semanas)' },
+  { value: 15, label: '15 dias' },
+];
+
+const SAGE_URGENT_OPTIONS = [
+  { value: 10, label: '10 dias' },
+  { value: 12, label: '12 dias' },
+  { value: 14, label: '14 dias — padrão' },
+  { value: 15, label: '15 dias' },
+  { value: 21, label: '21 dias (3 semanas)' },
+];
+
+const CAGE_WARN_OPTIONS = [
+  { value: 24, label: '24 h (1 dia)' },
+  { value: 36, label: '36 h (1,5 dias)' },
+  { value: 48, label: '48 h (2 dias) — padrão' },
+  { value: 60, label: '60 h (2,5 dias)' },
+  { value: 72, label: '72 h (3 dias)' },
+  { value: 96, label: '96 h (4 dias)' },
+];
+
+const CAGE_URGENT_OPTIONS = [
+  { value: 48,  label: '48 h (2 dias)' },
+  { value: 60,  label: '60 h (2,5 dias)' },
+  { value: 72,  label: '72 h (3 dias) — padrão' },
+  { value: 84,  label: '84 h (3,5 dias)' },
+  { value: 96,  label: '96 h (4 dias)' },
+  { value: 120, label: '120 h (5 dias)' },
+];
+
+const PEN_WARN_OPTIONS = [
+  { value: 14, label: '14 dias (2 semanas)' },
+  { value: 21, label: '21 dias (3 semanas)' },
+  { value: 20, label: '20 dias — padrão' },
+  { value: 25, label: '25 dias' },
+  { value: 28, label: '28 dias (4 semanas)' },
+  { value: 35, label: '35 dias (5 semanas)' },
+];
+
+const PEN_URGENT_OPTIONS = [
+  { value: 21, label: '21 dias (3 semanas)' },
+  { value: 25, label: '25 dias' },
+  { value: 28, label: '28 dias (4 semanas) — padrão' },
+  { value: 35, label: '35 dias (5 semanas)' },
+  { value: 42, label: '42 dias (6 semanas)' },
+];
+
 const DIA_OPTIONS = [
   { value: 2,   label: '2 horas' },
   { value: 2.5, label: '2,5 horas' },
@@ -59,6 +112,12 @@ export function SettingsPage() {
     alarmThresholds, setAlarmThresholds,
     dia, setDia,
     carbAbsorptionRate, setCarbAbsorptionRate,
+    deviceAgeThresholds, setDeviceAgeThresholds,
+    scheduledBasalRate, setScheduledBasalRate,
+    isf, setIsf,
+    icr, setIcr,
+    targetBG, setTargetBG,
+    rapidPenStep, setRapidPenStep,
   } = useDashboardStore();
 
   // Local threshold state (shown in selected unit)
@@ -101,6 +160,51 @@ export function SettingsPage() {
   function handleCarbAbsorptionRateChange(gPerHour: number) {
     setCarbAbsorptionRate(gPerHour);
     saveSettings({ carbAbsorptionRate: gPerHour }).catch(() => {});
+  }
+
+  function handleDeviceAgeThresholdChange(
+    field: keyof DeviceAgeThresholds,
+    value: number,
+  ) {
+    const next = { ...deviceAgeThresholds, [field]: value };
+    setDeviceAgeThresholds(next);
+    saveSettings({ deviceAgeThresholds: next }).catch(() => {});
+  }
+
+  function handleScheduledBasalRateChange(value: string) {
+    const num = parseFloat(value);
+    const rate = isNaN(num) || num < 0 ? 0 : Math.round(num * 100) / 100;
+    setScheduledBasalRate(rate);
+    saveSettings({ scheduledBasalRate: rate }).catch(() => {});
+  }
+
+  function handleIsfChange(value: string) {
+    const num = parseFloat(value);
+    if (isNaN(num) || num <= 0) return;
+    const mgdl = Math.round(fromDisplayUnit(num, unit) * 10) / 10;
+    setIsf(mgdl);
+    saveSettings({ isf: mgdl }).catch(() => {});
+  }
+
+  function handleIcrChange(value: string) {
+    const num = parseFloat(value);
+    if (isNaN(num) || num <= 0) return;
+    const val = Math.round(num * 10) / 10;
+    setIcr(val);
+    saveSettings({ icr: val }).catch(() => {});
+  }
+
+  function handleTargetBGChange(value: string) {
+    const num = parseFloat(value);
+    if (isNaN(num) || num <= 0) return;
+    const mgdl = Math.round(fromDisplayUnit(num, unit) * 10) / 10;
+    setTargetBG(mgdl);
+    saveSettings({ targetBG: mgdl }).catch(() => {});
+  }
+
+  function handleDeviceAgeReset() {
+    setDeviceAgeThresholds(DEFAULT_DEVICE_AGE_THRESHOLDS);
+    saveSettings({ deviceAgeThresholds: DEFAULT_DEVICE_AGE_THRESHOLDS }).catch(() => {});
   }
 
   function handleThresholdChange(
@@ -387,6 +491,305 @@ export function SettingsPage() {
                 {errors.map((e, i) => <p key={i}>{e}</p>)}
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* ============ IDADE DOS DISPOSITIVOS ============ */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Timer className="h-4 w-4" />
+              Idade dos Dispositivos
+            </CardTitle>
+            <CardDescription>
+              Limites de tempo para SAGE (sensor), CAGE (cânula), IAGE (insulina) e canetas.
+              Amarelo = aviso; vermelho = vencido.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+
+            {/* SAGE */}
+            <div>
+              <p className="text-sm font-medium mb-3 flex items-center gap-1.5">
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-cyan-400" />
+                Sensor CGM (Sensor Change)
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="sageWarnD">Avisar após</Label>
+                  <Select
+                    id="sageWarnD"
+                    value={String(deviceAgeThresholds.sageWarnD ?? 10)}
+                    onChange={(e) => handleDeviceAgeThresholdChange('sageWarnD', Number(e.target.value))}
+                  >
+                    {SAGE_WARN_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="sageUrgentD">Crítico após</Label>
+                  <Select
+                    id="sageUrgentD"
+                    value={String(deviceAgeThresholds.sageUrgentD ?? 14)}
+                    onChange={(e) => handleDeviceAgeThresholdChange('sageUrgentD', Number(e.target.value))}
+                  >
+                    {SAGE_URGENT_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            {/* CAGE */}
+            <div>
+              <p className="text-sm font-medium mb-3 flex items-center gap-1.5">
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500" />
+                Cânula (Site Change)
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="cageWarnH">Avisar após</Label>
+                  <Select
+                    id="cageWarnH"
+                    value={String(deviceAgeThresholds.cageWarnH)}
+                    onChange={(e) => handleDeviceAgeThresholdChange('cageWarnH', Number(e.target.value))}
+                  >
+                    {CAGE_WARN_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="cageUrgentH">Crítico após</Label>
+                  <Select
+                    id="cageUrgentH"
+                    value={String(deviceAgeThresholds.cageUrgentH)}
+                    onChange={(e) => handleDeviceAgeThresholdChange('cageUrgentH', Number(e.target.value))}
+                  >
+                    {CAGE_URGENT_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            {/* Pens / IAGE */}
+            <div>
+              <p className="text-sm font-medium mb-3 flex items-center gap-1.5">
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-400" />
+                Insulina (IAGE · Caneta Basal · Caneta Rápida)
+              </p>
+              <p className="text-xs text-muted-foreground mb-3 -mt-1">
+                Mesmo limite para "Troca de Insulina", "Nova Caneta Basal" e "Nova Caneta Rápida".
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="penWarnD">Avisar após</Label>
+                  <Select
+                    id="penWarnD"
+                    value={String(deviceAgeThresholds.penWarnD)}
+                    onChange={(e) => handleDeviceAgeThresholdChange('penWarnD', Number(e.target.value))}
+                  >
+                    {PEN_WARN_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="penUrgentD">Crítico após</Label>
+                  <Select
+                    id="penUrgentD"
+                    value={String(deviceAgeThresholds.penUrgentD)}
+                    onChange={(e) => handleDeviceAgeThresholdChange('penUrgentD', Number(e.target.value))}
+                  >
+                    {PEN_URGENT_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <Button variant="outline" size="sm" onClick={handleDeviceAgeReset}
+                      className="flex items-center gap-1.5 text-xs">
+                <RotateCcw className="h-3 w-3" />
+                Restaurar padrões
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ============ BOMBA DE INSULINA ============ */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Activity className="h-4 w-4" />
+              Bomba de Insulina
+            </CardTitle>
+            <CardDescription>
+              Configurações específicas para usuários de bomba (CSII).
+              Não é necessário preencher se usar canetas (MDI).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="scheduledBasalRate">
+                Taxa basal programada
+              </Label>
+              <div className="relative max-w-[180px]">
+                <Input
+                  id="scheduledBasalRate"
+                  type="number"
+                  min="0"
+                  step="0.05"
+                  placeholder="0.00"
+                  value={scheduledBasalRate === 0 ? '' : String(scheduledBasalRate)}
+                  onChange={(e) => handleScheduledBasalRateChange(e.target.value)}
+                  onBlur={(e) => handleScheduledBasalRateChange(e.target.value)}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                  U/h
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Usada para calcular o IOB de basais temporárias (desvio da taxa
+                programada). Deixe em 0 se não usar bomba ou se não quiser incluir
+                Temp Basal no IOB.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ============ CALCULADORA DE BOLUS ============ */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Calculator className="h-4 w-4" />
+              Calculadora de Bolus
+            </CardTitle>
+            <CardDescription>
+              Parâmetros padrão para cálculo de dose. Podem ser ajustados individualmente
+              a cada cálculo no modal da calculadora.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* ISF */}
+            <div className="space-y-1.5">
+              <Label htmlFor="isf">
+                ISF — Sensibilidade à Insulina
+              </Label>
+              <div className="relative max-w-[180px]">
+                <Input
+                  id="isf"
+                  type="number"
+                  min="1"
+                  step={unit === 'mmol' ? '0.1' : '1'}
+                  placeholder={unit === 'mmol' ? '2.8' : '50'}
+                  value={isf > 0 ? String(Math.round(toDisplayUnit(isf, unit) * 10) / 10) : ''}
+                  onChange={(e) => handleIsfChange(e.target.value)}
+                  onBlur={(e) => handleIsfChange(e.target.value)}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                  {ul}/U
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Quanto 1 U de insulina reduz a glicose.
+              </p>
+            </div>
+
+            {/* ICR */}
+            <div className="space-y-1.5">
+              <Label htmlFor="icr">
+                ICR — Relação Insulina-Carboidrato
+              </Label>
+              <div className="relative max-w-[180px]">
+                <Input
+                  id="icr"
+                  type="number"
+                  min="1"
+                  step="0.5"
+                  placeholder="15"
+                  value={icr > 0 ? String(icr) : ''}
+                  onChange={(e) => handleIcrChange(e.target.value)}
+                  onBlur={(e) => handleIcrChange(e.target.value)}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                  g/U
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Quantos gramas de carboidrato 1 U cobre.
+              </p>
+            </div>
+
+            {/* Target BG */}
+            <div className="space-y-1.5">
+              <Label htmlFor="targetBG">
+                Glicose Alvo
+              </Label>
+              <div className="relative max-w-[180px]">
+                <Input
+                  id="targetBG"
+                  type="number"
+                  min="1"
+                  step={unit === 'mmol' ? '0.1' : '1'}
+                  placeholder={unit === 'mmol' ? '5.5' : '100'}
+                  value={targetBG > 0 ? String(Math.round(toDisplayUnit(targetBG, unit) * 10) / 10) : ''}
+                  onChange={(e) => handleTargetBGChange(e.target.value)}
+                  onBlur={(e) => handleTargetBGChange(e.target.value)}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                  {ul}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Valor de glicose desejado para o cálculo da dose de correção.
+              </p>
+            </div>
+
+            {/* Pen step */}
+            <div className="space-y-1.5">
+              <Label>Incremento da caneta rápida</Label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                  <input
+                    type="radio"
+                    name="rapidPenStep"
+                    value="1"
+                    checked={rapidPenStep === 1}
+                    onChange={() => {
+                      setRapidPenStep(1);
+                      saveSettings({ rapidPenStep: 1 }).catch(() => {});
+                    }}
+                    className="accent-primary"
+                  />
+                  1 U
+                </label>
+                <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                  <input
+                    type="radio"
+                    name="rapidPenStep"
+                    value="0.5"
+                    checked={rapidPenStep === 0.5}
+                    onChange={() => {
+                      setRapidPenStep(0.5);
+                      saveSettings({ rapidPenStep: 0.5 }).catch(() => {});
+                    }}
+                    className="accent-primary"
+                  />
+                  0,5 U
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Dose mínima aplicável. A calculadora arredonda para o múltiplo mais próximo.
+                Atualizado automaticamente ao registrar uma Nova Caneta Rápida.
+              </p>
+            </div>
           </CardContent>
         </Card>
 

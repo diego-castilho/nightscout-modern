@@ -60,6 +60,12 @@ const TREATMENT_VISUAL: Record<string, { color: string; label: string; char: str
   'Carb Correction':  { color: '#f97316', label: 'Correção de Carbos', char: 'C' },
   'BG Check':         { color: '#14b8a6', label: 'Leitura de Glicose', char: 'G' },
   'Note':             { color: '#64748b', label: 'Anotação',            char: 'N' },
+  'Sensor Change':    { color: '#06b6d4', label: 'Troca de Sensor',     char: 'M' },
+  'Site Change':      { color: '#22c55e', label: 'Troca de Site',       char: 'S' },
+  'Insulin Change':   { color: '#f59e0b', label: 'Troca de Insulina',   char: 'I' },
+  'Basal Pen Change': { color: '#818cf8', label: 'Caneta Basal',        char: 'L' },
+  'Rapid Pen Change': { color: '#fb7185', label: 'Caneta Rápida',       char: 'F' },
+  'Temp Basal':       { color: '#8b5cf6', label: 'Basal Temporária',    char: 'T' },
 };
 
 // TIR zone colors (matching TIRChart)
@@ -168,6 +174,8 @@ function TreatmentTooltipContent({ treatment, unit }: { treatment: Treatment; un
       <p className="font-semibold text-xs mb-0.5" style={{ color: cfg?.color }}>{labelPT}</p>
       <p className="text-[10px] text-muted-foreground mb-1.5">{timeStr}</p>
       <div className="space-y-0.5 text-xs">
+        {treatment.rate     != null && <p>Taxa: <span className="font-medium">{treatment.rate} {treatment.rateMode === 'relative' ? '%' : 'U/h'}</span></p>}
+        {treatment.duration != null && <p>Duração: <span className="font-medium">{treatment.duration} min</span></p>}
         {treatment.insulin  != null && <p>Insulina: <span className="font-medium">{treatment.insulin}U</span></p>}
         {treatment.carbs    != null && <p>Carbos: <span className="font-medium">{treatment.carbs}g</span></p>}
         {treatment.glucose  != null && <p>Glicose: <span className="font-medium">{formatGlucose(treatment.glucose, unit)} {ul}</span></p>}
@@ -253,8 +261,20 @@ function CustomTooltip({ active, payload, unit, thresholds }: CustomTooltipProps
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+// Returns the fill color for a Temp Basal band based on deviation from scheduled rate
+function tempBasalColor(treatment: Treatment, scheduledRate: number): string {
+  if (treatment.rate == null || scheduledRate === 0) return '#8b5cf6'; // unknown
+  const actualRate = treatment.rateMode === 'relative'
+    ? (treatment.rate / 100) * scheduledRate
+    : treatment.rate;
+  const deviation = actualRate - scheduledRate;
+  if (deviation < -0.01) return '#f59e0b'; // reduced / suspend
+  if (deviation >  0.01) return '#3b82f6'; // increased
+  return '#94a3b8';                        // same as scheduled
+}
+
 export function GlucoseAreaChart({ entries, loading }: Props) {
-  const { period, unit, alarmThresholds, darkMode, lastRefresh } = useDashboardStore();
+  const { period, unit, alarmThresholds, darkMode, lastRefresh, scheduledBasalRate } = useDashboardStore();
 
   // Zoom state
   const [zoomLeft, setZoomLeft]         = useState<number | null>(null);
@@ -350,6 +370,10 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
     const ts = new Date(t.created_at).getTime();
     return ts >= displayStart && ts <= displayEnd;
   });
+
+  // Temp Basal uses ReferenceArea bands; all others use circle markers
+  const tempBasalTreatments = visibleTreatments.filter((t) => t.eventType === 'Temp Basal');
+  const pointTreatments     = visibleTreatments.filter((t) => t.eventType !== 'Temp Basal');
 
   const visibleEventTypes = [...new Set(visibleTreatments.map((t) => t.eventType))];
 
@@ -540,11 +564,27 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
                 />
               )}
 
+              {/* Temp Basal bands — ReferenceArea per treatment, color by deviation */}
+              {showTreatments && tempBasalTreatments.map((t) => {
+                const startMs = new Date(t.created_at).getTime();
+                const endMs   = startMs + (t.duration ?? 0) * 60_000;
+                return (
+                  <ReferenceArea
+                    key={t._id}
+                    x1={startMs}
+                    x2={endMs}
+                    fill={tempBasalColor(t, scheduledBasalRate)}
+                    fillOpacity={0.18}
+                    strokeOpacity={0}
+                  />
+                );
+              })}
+
               {/* Treatment markers — one ReferenceLine per treatment (stroke="none"
                   so it doesn't affect tooltip or XAxis domain). Recharts passes
                   viewBox to the label element via cloneElement, giving exact
                   SVG pixel coords for the marker icon placement. */}
-              {showTreatments && visibleTreatments.map((t) => (
+              {showTreatments && pointTreatments.map((t) => (
                 <ReferenceLine
                   key={t._id}
                   x={new Date(t.created_at).getTime()}

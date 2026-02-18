@@ -13,7 +13,7 @@ import { calculateIOB } from '../lib/iob';
 import { useDashboardStore } from '../stores/dashboardStore';
 
 export function useIOB(): number {
-  const { dia, lastRefresh } = useDashboardStore();
+  const { dia, lastRefresh, scheduledBasalRate } = useDashboardStore();
   const [iob, setIob] = useState(0);
 
   const recalculate = useCallback(async () => {
@@ -21,11 +21,11 @@ export function useIOB(): number {
       const startDate = new Date(Date.now() - dia * 3_600_000).toISOString();
       const endDate   = new Date().toISOString();
       const treatments = await getTreatments({ startDate, endDate, limit: 200 });
-      setIob(calculateIOB(treatments ?? [], dia));
+      setIob(calculateIOB(treatments ?? [], dia, scheduledBasalRate));
     } catch {
       // Keep previous value on fetch error
     }
-  }, [dia, lastRefresh]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dia, lastRefresh, scheduledBasalRate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     recalculate();

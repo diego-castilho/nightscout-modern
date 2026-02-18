@@ -1,6 +1,8 @@
 // ============================================================================
 // TreatmentModal — Formulário de registro de tratamento (Careportal)
-// Suporta: Meal Bolus, Correction Bolus, Carb Correction, BG Check, Note
+// Suporta: Meal Bolus, Correction Bolus, Carb Correction, BG Check, Note,
+//          Sensor Change, Site Change, Insulin Change,
+//          Basal Pen Change, Rapid Pen Change, Temp Basal
 // ============================================================================
 
 import { useState } from 'react';
@@ -8,7 +10,7 @@ import { X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { createTreatment } from '../../lib/api';
+import { createTreatment, saveSettings } from '../../lib/api';
 import { useDashboardStore } from '../../stores/dashboardStore';
 import { unitLabel, fromDisplayUnit } from '../../lib/glucose';
 
@@ -20,9 +22,15 @@ export const EVENT_TYPES = [
   { value: 'Carb Correction',   label: 'Correção de Carbos' },
   { value: 'BG Check',          label: 'Leitura de Glicose' },
   { value: 'Note',              label: 'Anotação' },
+  { value: 'Temp Basal',        label: 'Basal Temporária' },
+  { value: 'Sensor Change',     label: 'Troca de Sensor (CGM)' },
+  { value: 'Site Change',       label: 'Troca de Site (Cânula)' },
+  { value: 'Insulin Change',    label: 'Troca de Insulina (IAGE)' },
+  { value: 'Basal Pen Change',  label: 'Nova Caneta Basal' },
+  { value: 'Rapid Pen Change',  label: 'Nova Caneta Rápida' },
 ] as const;
 
-type EventTypeValue = typeof EVENT_TYPES[number]['value'];
+export type EventTypeValue = typeof EVENT_TYPES[number]['value'];
 
 interface FieldConfig {
   insulin?: boolean;
@@ -31,11 +39,17 @@ interface FieldConfig {
   protein?: boolean;
   fat?: boolean;
   notes?: boolean;
+  rate?: boolean;
+  duration?: boolean;
+  rateMode?: boolean;
+  penStep?: boolean;  // Rapid pen dosing increment selector
   // required subsets
   insulinRequired?: boolean;
   carbsRequired?: boolean;
   glucoseRequired?: boolean;
   notesRequired?: boolean;
+  rateRequired?: boolean;
+  durationRequired?: boolean;
 }
 
 const FIELD_CONFIG: Record<EventTypeValue, FieldConfig> = {
@@ -44,6 +58,12 @@ const FIELD_CONFIG: Record<EventTypeValue, FieldConfig> = {
   'Carb Correction':  { carbs: true, carbsRequired: true, glucose: true, notes: true },
   'BG Check':         { glucose: true, glucoseRequired: true, notes: true },
   'Note':             { notes: true, notesRequired: true },
+  'Temp Basal':       { rate: true, rateRequired: true, duration: true, durationRequired: true, rateMode: true, notes: true },
+  'Sensor Change':    { notes: true },
+  'Site Change':      { notes: true },
+  'Insulin Change':   { notes: true },
+  'Basal Pen Change': { notes: true },
+  'Rapid Pen Change': { penStep: true, notes: true },
 };
 
 // ---- Helpers ----------------------------------------------------------------
@@ -57,33 +77,48 @@ function nowDatetimeLocal(): string {
 
 // ---- Props ------------------------------------------------------------------
 
+interface InitialValues {
+  eventType?: EventTypeValue;
+  insulin?:   string;
+  carbs?:     string;
+  glucose?:   string;
+}
+
 interface Props {
-  onClose: () => void;
-  onSuccess: () => void;
+  onClose:        () => void;
+  onSuccess:      () => void;
+  initialValues?: InitialValues;
 }
 
 // ---- Component --------------------------------------------------------------
 
-export function TreatmentModal({ onClose, onSuccess }: Props) {
-  const { unit } = useDashboardStore();
+export function TreatmentModal({ onClose, onSuccess, initialValues }: Props) {
+  const { unit, scheduledBasalRate, setRapidPenStep } = useDashboardStore();
   const ul = unitLabel(unit);
 
-  const [eventType, setEventType] = useState<EventTypeValue>('Meal Bolus');
+  const [eventType, setEventType] = useState<EventTypeValue>(initialValues?.eventType ?? 'Meal Bolus');
   const [datetimeLocal, setDatetimeLocal] = useState(nowDatetimeLocal());
-  const [insulin, setInsulin]   = useState('');
-  const [carbs, setCarbs]       = useState('');
-  const [glucose, setGlucose]   = useState('');
+  const [insulin, setInsulin]   = useState(initialValues?.insulin   ?? '');
+  const [carbs, setCarbs]       = useState(initialValues?.carbs     ?? '');
+  const [glucose, setGlucose]   = useState(initialValues?.glucose   ?? '');
   const [protein, setProtein]   = useState('');
   const [fat, setFat]           = useState('');
   const [notes, setNotes]       = useState('');
-  const [saving, setSaving]     = useState(false);
-  const [errors, setErrors]     = useState<string[]>([]);
+  const [rate, setRate]         = useState('');
+  const [duration, setDuration] = useState('');
+  const [rateMode, setRateMode]   = useState<'absolute' | 'relative'>('absolute');
+  const [penStep, setPenStep]     = useState<0.5 | 1>(1);
+  const [saving, setSaving]       = useState(false);
+  const [errors, setErrors]       = useState<string[]>([]);
 
   const cfg = FIELD_CONFIG[eventType];
 
   function resetFields() {
     setInsulin(''); setCarbs(''); setGlucose('');
     setProtein(''); setFat(''); setNotes('');
+    setRate(''); setDuration('');
+    setRateMode('absolute');
+    setPenStep(1);
     setErrors([]);
   }
 
@@ -94,10 +129,12 @@ export function TreatmentModal({ onClose, onSuccess }: Props) {
 
   function validate(): boolean {
     const errs: string[] = [];
-    if (cfg.insulinRequired && !insulin)  errs.push('Insulina é obrigatória.');
-    if (cfg.carbsRequired   && !carbs)    errs.push('Carbos são obrigatórios.');
-    if (cfg.glucoseRequired && !glucose)  errs.push('Glicose é obrigatória.');
-    if (cfg.notesRequired   && !notes.trim()) errs.push('Texto da anotação é obrigatório.');
+    if (cfg.insulinRequired  && !insulin)       errs.push('Insulina é obrigatória.');
+    if (cfg.carbsRequired    && !carbs)         errs.push('Carbos são obrigatórios.');
+    if (cfg.glucoseRequired  && !glucose)       errs.push('Glicose é obrigatória.');
+    if (cfg.notesRequired    && !notes.trim())  errs.push('Texto da anotação é obrigatório.');
+    if (cfg.rateRequired     && !rate)          errs.push('Taxa basal é obrigatória.');
+    if (cfg.durationRequired && !duration)      errs.push('Duração é obrigatória.');
     setErrors(errs);
     return errs.length === 0;
   }
@@ -115,12 +152,24 @@ export function TreatmentModal({ onClose, onSuccess }: Props) {
 
       const payload: Record<string, unknown> = { eventType, created_at };
 
-      if (insulin)  payload.insulin = parseFloat(insulin);
-      if (carbs)    payload.carbs   = parseFloat(carbs);
-      if (glucose)  payload.glucose = fromDisplayUnit(parseFloat(glucose), unit);
-      if (protein)  payload.protein = parseFloat(protein);
-      if (fat)      payload.fat     = parseFloat(fat);
-      if (notes)    payload.notes   = notes.trim();
+      if (insulin)  payload.insulin   = parseFloat(insulin);
+      if (carbs)    payload.carbs     = parseFloat(carbs);
+      if (glucose)  payload.glucose   = fromDisplayUnit(parseFloat(glucose), unit);
+      if (protein)  payload.protein   = parseFloat(protein);
+      if (fat)      payload.fat       = parseFloat(fat);
+      if (notes)    payload.notes     = notes.trim();
+      if (rate)     payload.rate      = parseFloat(rate);
+      if (duration) payload.duration  = parseFloat(duration);
+      if (cfg.rateMode) payload.rateMode = rateMode;
+
+      // Persist pen step: update store + server settings
+      if (cfg.penStep) {
+        setRapidPenStep(penStep);
+        saveSettings({ rapidPenStep: penStep }).catch(() => {});
+        // Append step info to notes for record-keeping
+        const stepNote = `Doses: ${penStep === 0.5 ? '0,5' : '1'} U`;
+        payload.notes = notes.trim() ? `${notes.trim()} | ${stepNote}` : stepNote;
+      }
 
       await createTreatment(payload as any);
       onSuccess();
@@ -174,6 +223,87 @@ export function TreatmentModal({ onClose, onSuccess }: Props) {
               className="text-sm"
             />
           </div>
+
+          {/* Modo basal (absolute / relative) — Temp Basal only */}
+          {cfg.rateMode && (
+            <div className="space-y-1.5">
+              <Label>Modo</Label>
+              <div className="flex gap-3">
+                <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                  <input
+                    type="radio"
+                    name="rateMode"
+                    value="absolute"
+                    checked={rateMode === 'absolute'}
+                    onChange={() => setRateMode('absolute')}
+                    className="accent-primary"
+                  />
+                  Absoluta (U/h)
+                </label>
+                <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                  <input
+                    type="radio"
+                    name="rateMode"
+                    value="relative"
+                    checked={rateMode === 'relative'}
+                    onChange={() => setRateMode('relative')}
+                    className="accent-primary"
+                  />
+                  Relativa (%)
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* Taxa basal — Temp Basal only */}
+          {cfg.rate && (
+            <div className="space-y-1.5">
+              <Label htmlFor="rate">
+                Taxa{cfg.rateRequired && <span className="text-destructive ml-0.5">*</span>}
+              </Label>
+              <div className="relative">
+                <Input
+                  id="rate"
+                  type="number"
+                  min="0"
+                  step={rateMode === 'absolute' ? '0.05' : '5'}
+                  placeholder="0"
+                  value={rate}
+                  onChange={(e) => setRate(e.target.value)}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                  {rateMode === 'absolute' ? 'U/h' : '%'}
+                </span>
+              </div>
+              {/* Hint: relative mode without scheduled basal configured */}
+              {rateMode === 'relative' && scheduledBasalRate === 0 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  Configure a taxa basal programada nas Configurações para incluir no IOB.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Duração — Temp Basal only */}
+          {cfg.duration && (
+            <div className="space-y-1.5">
+              <Label htmlFor="duration">
+                Duração{cfg.durationRequired && <span className="text-destructive ml-0.5">*</span>}
+              </Label>
+              <div className="relative">
+                <Input
+                  id="duration"
+                  type="number"
+                  min="0"
+                  step="5"
+                  placeholder="30"
+                  value={duration}
+                  onChange={(e) => setDuration(e.target.value)}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">min</span>
+              </div>
+            </div>
+          )}
 
           {/* Insulina */}
           {cfg.insulin && (
@@ -275,6 +405,40 @@ export function TreatmentModal({ onClose, onSuccess }: Props) {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Incremento de dose — Rapid Pen Change only */}
+          {cfg.penStep && (
+            <div className="space-y-1.5">
+              <Label>Incremento de dose</Label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                  <input
+                    type="radio"
+                    name="penStep"
+                    value="1"
+                    checked={penStep === 1}
+                    onChange={() => setPenStep(1)}
+                    className="accent-primary"
+                  />
+                  1 U
+                </label>
+                <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                  <input
+                    type="radio"
+                    name="penStep"
+                    value="0.5"
+                    checked={penStep === 0.5}
+                    onChange={() => setPenStep(0.5)}
+                    className="accent-primary"
+                  />
+                  0,5 U
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Usado pela calculadora de bolus para arredondar a dose sugerida.
+              </p>
             </div>
           )}
 
