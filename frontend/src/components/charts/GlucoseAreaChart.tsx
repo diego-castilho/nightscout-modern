@@ -584,17 +584,18 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
             </ComposedChart>
           </ResponsiveContainer>
 
-          {/* Treatment tooltip — HTML div absolutely positioned over the SVG */}
+          {/* Treatment tooltip — HTML div absolutely positioned below the marker icon.
+              Centered horizontally on cx; offset cy by circle radius (9) + gap (6). */}
           {treatmentTooltip && (
             <div
               style={{
-                position: 'absolute',
-                left:     Math.min(treatmentTooltip.cx + 14, 250),
-                top:      Math.max(treatmentTooltip.cy - 24, 4),
-                zIndex:   50,
+                position:  'absolute',
+                left:      Math.max(4, treatmentTooltip.cx - 75),
+                top:       treatmentTooltip.cy + 15,
+                zIndex:    50,
                 pointerEvents: 'none',
               }}
-              className="bg-background border border-border rounded-lg shadow-xl p-2.5 text-xs min-w-[150px] max-w-[210px]"
+              className="bg-background border border-border rounded-lg shadow-xl p-2.5 text-xs min-w-[150px] max-w-[200px]"
             >
               <TreatmentTooltipContent treatment={treatmentTooltip.treatment} unit={unit} />
             </div>
