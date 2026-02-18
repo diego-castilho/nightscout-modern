@@ -5,12 +5,17 @@
 // from the actual Y-axis range so zone boundaries are pixel-accurate.
 // Supports drag-to-zoom: drag horizontally to select a time range.
 // Double-click or "Reset" button restores the full view.
+//
+// AR2 prediction: extends the chart 30 min ahead using the same algorithm
+// as Nightscout (sgv_next = 1.6*s0 - 0.6*s1). Shown as a dashed line with
+// the same TIR zone colors at lower opacity.
 // ============================================================================
 
 import { useState } from 'react';
 import {
   ComposedChart,
   Area,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -35,7 +40,8 @@ interface Props {
 
 interface ChartPoint {
   time: number;
-  sgv: number;
+  sgv?: number | null;
+  sgvPredicted?: number | null;
   direction?: string;
   trend?: number;
 }
@@ -89,6 +95,38 @@ function buildStrokeStops(minVal: number, maxVal: number, t: AlarmThresholds) {
   return stops;
 }
 
+// ── AR2 prediction algorithm (same coefficients as Nightscout) ──────────────
+// sgv_next = 1.6 × sgv_t − 0.6 × sgv_(t-1)
+// Generates 'steps' predictions at the actual CGM interval (typically 5 min).
+// Returns empty array if last reading is stale (> 10 min old).
+function calculateAR2(
+  entries: GlucoseEntry[],
+  steps = 6
+): Array<{ time: number; sgvPredicted: number }> {
+  if (entries.length < 2) return [];
+
+  const sorted = [...entries].sort((a, b) => b.date - a.date);
+  const last = sorted[0];
+  const prev = sorted[1];
+
+  // Don't predict if last reading is older than 10 minutes
+  if (Date.now() - last.date > 10 * 60_000) return [];
+
+  // Use actual interval between the two most recent readings (clamp 3–10 min)
+  const interval = Math.max(3 * 60_000, Math.min(10 * 60_000, last.date - prev.date));
+
+  const predictions: Array<{ time: number; sgvPredicted: number }> = [];
+  let s0 = last.sgv, s1 = prev.sgv;
+
+  for (let i = 1; i <= steps; i++) {
+    const p = Math.max(40, Math.min(400, 1.6 * s0 - 0.6 * s1));
+    predictions.push({ time: last.date + i * interval, sgvPredicted: p });
+    s1 = s0;
+    s0 = p;
+  }
+  return predictions;
+}
+
 // X-axis tick config per period
 function getTickConfig(period: Period, start: number, end: number) {
   const configs: Record<Period, { intervalMs: number; formatStr: string }> = {
@@ -117,12 +155,9 @@ function getZoomedTickConfig(domainMs: number): { intervalMs: number; formatStr:
   return { intervalMs: 24 * 3600_000, formatStr: 'dd/MM' };
 }
 
-interface CustomTooltipProps {
+interface CustomTooltipWithUnitProps {
   active?: boolean;
   payload?: Array<{ payload: ChartPoint }>;
-}
-
-interface CustomTooltipWithUnitProps extends CustomTooltipProps {
   unit: import('../../lib/glucose').GlucoseUnit;
   thresholds: AlarmThresholds;
 }
@@ -130,14 +165,18 @@ interface CustomTooltipWithUnitProps extends CustomTooltipProps {
 function CustomTooltip({ active, payload, unit, thresholds }: CustomTooltipWithUnitProps) {
   if (!active || !payload?.length) return null;
   const point = payload[0].payload;
-  const color = zoneColor(point.sgv, thresholds);
+  const isPrediction = point.sgv == null && point.sgvPredicted != null;
+  const value = isPrediction ? point.sgvPredicted! : (point.sgv ?? 0);
+  const color = zoneColor(value, thresholds);
   return (
     <div className="bg-background border border-border rounded-lg shadow-lg p-3 text-sm">
       <p className="text-muted-foreground text-xs mb-1">
         {format(new Date(point.time), 'dd/MM HH:mm', { locale: ptBR })}
+        {isPrediction && <span className="ml-1 opacity-60">(previsão)</span>}
       </p>
       <p className="font-bold text-base" style={{ color }}>
-        {formatGlucose(point.sgv, unit)} {unitLabel(unit)} {getTrendArrow(point.trend)}
+        {formatGlucose(value, unit)} {unitLabel(unit)}
+        {!isPrediction && getTrendArrow(point.trend)}
       </p>
     </div>
   );
@@ -180,22 +219,41 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
     .sort((a, b) => a.date - b.date)
     .map((e) => ({ time: e.date, sgv: e.sgv, direction: e.direction, trend: e.trend }));
 
+  // ── AR2 predictions ────────────────────────────────────────────────────────
+  const showPredictions = ['1h', '3h', '6h', '12h', '24h'].includes(period);
+  let chartData: ChartPoint[] = data.map((d) => ({ ...d }));
+
+  if (showPredictions && data.length >= 2) {
+    const predPoints = calculateAR2(entries);
+    if (predPoints.length > 0) {
+      // Bridge: last real point also carries sgvPredicted to seamlessly connect lines
+      chartData[chartData.length - 1] = {
+        ...chartData[chartData.length - 1],
+        sgvPredicted: chartData[chartData.length - 1].sgv,
+      };
+      predPoints.forEach((p) =>
+        chartData.push({ time: p.time, sgvPredicted: p.sgvPredicted })
+      );
+    }
+  }
+
   // Filter to zoomed range — this is what actually expands the chart visually
   const visibleData = zoomedDomain
-    ? data.filter(d => d.time >= zoomedDomain[0] && d.time <= zoomedDomain[1])
-    : data;
+    ? chartData.filter((d) => d.time >= zoomedDomain[0] && d.time <= zoomedDomain[1])
+    : chartData;
 
-  const displayData = visibleData.length > 0 ? visibleData : data;
+  const displayData = visibleData.length > 0 ? visibleData : chartData;
 
-  // Y axis adapts to the visible range when zoomed
-  const rawMin = Math.min(...displayData.map((d) => d.sgv));
-  const rawMax = Math.max(...displayData.map((d) => d.sgv));
+  // Y axis adapts to the visible range (includes prediction values)
+  const allSgv = displayData.flatMap((d) => [d.sgv, d.sgvPredicted]).filter((v): v is number => v != null);
+  const rawMin = allSgv.length > 0 ? Math.min(...allSgv) : 70;
+  const rawMax = allSgv.length > 0 ? Math.max(...allSgv) : 180;
   const minVal = Math.max(0, rawMin - 20);
   const maxVal = Math.min(400, rawMax + 30);
 
   // Active ticks/format — adapts when zoomed
   const { ticks: baseTicks, formatStr: baseFormatStr } = getTickConfig(
-    period, data[0].time, data[data.length - 1].time
+    period, data[0].time, chartData[chartData.length - 1].time
   );
 
   let activeTicks: number[];
@@ -214,7 +272,10 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
     activeFormatStr = baseFormatStr;
   }
 
-  const showDots = displayData.length <= 20;
+  // Dots only for dense enough views
+  const actualCount = displayData.filter((d) => d.sgv != null).length;
+  const showDots = actualCount <= 20;
+
   const strokeStops = buildStrokeStops(minVal, maxVal, alarmThresholds);
 
   // Reference lines only if threshold is within the Y range
@@ -302,6 +363,13 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
                     return <stop key={i} offset={s.offset} stopColor={s.color} stopOpacity={op} />;
                   })}
                 </linearGradient>
+
+                {/* Prediction stroke gradient — same zones, lower opacity */}
+                <linearGradient id="predStroke" x1="0" y1="0" x2="0" y2="1">
+                  {strokeStops.map((s, i) => (
+                    <stop key={i} offset={s.offset} stopColor={s.color} stopOpacity={0.6} />
+                  ))}
+                </linearGradient>
               </defs>
 
               <CartesianGrid
@@ -352,6 +420,7 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
                 />
               ))}
 
+              {/* Actual glucose readings */}
               <Area
                 type="monotone"
                 dataKey="sgv"
@@ -362,7 +431,23 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
                 activeDot={{ r: 5, stroke: '#fff', strokeWidth: 2 }}
                 isAnimationActive={true}
                 animationDuration={600}
+                connectNulls={false}
               />
+
+              {/* AR2 prediction line — dashed, same zone colors at lower opacity */}
+              {showPredictions && (
+                <Line
+                  type="monotone"
+                  dataKey="sgvPredicted"
+                  stroke="url(#predStroke)"
+                  strokeWidth={2}
+                  strokeDasharray="5 4"
+                  dot={{ r: 3, strokeWidth: 0, opacity: 0.7 }}
+                  activeDot={{ r: 5, stroke: '#fff', strokeWidth: 2 }}
+                  connectNulls={false}
+                  isAnimationActive={false}
+                />
+              )}
 
               {/* Selection highlight during drag */}
               {zoomLeft !== null && zoomRight !== null && (
