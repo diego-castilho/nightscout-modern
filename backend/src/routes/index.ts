@@ -6,6 +6,7 @@ import { Router } from 'express';
 import glucoseRouter from './glucose.js';
 import analyticsRouter from './analytics.js';
 import settingsRouter from './settings.js';
+import treatmentsRouter from './treatments.js';
 import { getDatabaseStats } from '../db/queries.js';
 
 const router = Router();
@@ -73,6 +74,12 @@ router.get('/', (_req, res) => {
         method: 'GET',
         description: 'Detect glucose patterns',
         params: 'startDate (required), endDate (required)',
+      },
+      treatments: {
+        url: '/api/treatments',
+        method: 'GET | POST | DELETE',
+        description: 'List, create or delete treatment events',
+        params: 'GET: startDate, endDate, limit, eventType | DELETE: /:id',
       },
     },
     timestamp: new Date().toISOString(),
@@ -150,5 +157,6 @@ router.get('/debug/databases', async (_req, res) => {
 router.use('/glucose', glucoseRouter);
 router.use('/analytics', analyticsRouter);
 router.use('/settings', settingsRouter);
+router.use('/treatments', treatmentsRouter);
 
 export default router;

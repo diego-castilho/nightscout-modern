@@ -13,6 +13,7 @@ import { Header } from './components/layout/Header';
 import { DashboardPage } from './pages/DashboardPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ComparisonsPage } from './pages/ComparisonsPage';
+import { TreatmentsPage } from './pages/TreatmentsPage';
 
 function App() {
   // Initialize theme from persisted state
@@ -38,6 +39,7 @@ function App() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/comparisons" element={<ComparisonsPage />} />
+        <Route path="/treatments" element={<TreatmentsPage />} />
       </Routes>
     </div>
   );

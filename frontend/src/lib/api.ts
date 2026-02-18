@@ -217,4 +217,44 @@ export async function saveSettings(settings: AppSettings): Promise<void> {
   await api.put('/settings', settings);
 }
 
+// ============================================================================
+// Treatments (Careportal)
+// ============================================================================
+
+export interface Treatment {
+  _id: string;
+  eventType: string;
+  created_at: string;
+  timestamp?: string;
+  enteredBy?: string;
+  glucose?: number;
+  glucoseType?: string;
+  carbs?: number;
+  insulin?: number;
+  units?: string;
+  notes?: string;
+  duration?: number;
+  protein?: number;
+  fat?: number;
+}
+
+export async function getTreatments(params?: {
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+  eventType?: string;
+}): Promise<Treatment[]> {
+  const response = await api.get<{ success: boolean; data: Treatment[] }>('/treatments', { params });
+  return response.data.data;
+}
+
+export async function createTreatment(data: Omit<Treatment, '_id'>): Promise<Treatment> {
+  const response = await api.post<{ success: boolean; data: Treatment }>('/treatments', data);
+  return response.data.data;
+}
+
+export async function deleteTreatment(id: string): Promise<void> {
+  await api.delete(`/treatments/${id}`);
+}
+
 export default api;

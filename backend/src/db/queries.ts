@@ -2,6 +2,7 @@
 // MongoDB Query Functions - Nightscout Collections
 // ============================================================================
 
+import { ObjectId } from 'mongodb';
 import { getDatabase } from './connection.js';
 import type {
   GlucoseEntry,
@@ -112,6 +113,37 @@ export async function getTreatments(
     .toArray();
 
   return treatments;
+}
+
+export async function createTreatment(
+  data: Omit<Treatment, '_id'>
+): Promise<Treatment> {
+  const db = getDatabase();
+  const collection = db.collection<Omit<Treatment, '_id'>>('treatments');
+
+  const doc = {
+    ...data,
+    created_at: data.created_at ?? new Date().toISOString(),
+  };
+
+  const result = await collection.insertOne(doc as any);
+
+  return { ...doc, _id: result.insertedId.toString() } as Treatment;
+}
+
+export async function deleteTreatment(id: string): Promise<boolean> {
+  const db = getDatabase();
+  const collection = db.collection('treatments');
+
+  let objectId: ObjectId;
+  try {
+    objectId = new ObjectId(id);
+  } catch {
+    return false;
+  }
+
+  const result = await collection.deleteOne({ _id: objectId });
+  return result.deletedCount === 1;
 }
 
 export async function getTreatmentsByType(
