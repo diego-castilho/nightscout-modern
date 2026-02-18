@@ -65,13 +65,16 @@ export async function getGlucoseByDateRange(
   const collection = db.collection<GlucoseEntry>('entries');
 
   const entries = await collection
-    .find({
-      type: 'sgv',
-      date: {
-        $gte: startDate.getTime(),
-        $lte: endDate.getTime(),
+    .find(
+      {
+        type: 'sgv',
+        date: {
+          $gte: startDate.getTime(),
+          $lte: endDate.getTime(),
+        },
       },
-    })
+      { maxTimeMS: 60_000 }   // 60 s hard limit — avoids hanging requests
+    )
     .sort({ date: 1 })
     .toArray();
 

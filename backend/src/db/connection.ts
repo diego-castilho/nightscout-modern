@@ -49,10 +49,30 @@ export async function connectToDatabase(config: ConnectionConfig): Promise<Db> {
     console.log('✅ MongoDB connected successfully');
     console.log(`📊 Database: ${config.dbName}`);
 
+    // Ensure indexes for fast analytics queries
+    await ensureIndexes(db);
+
     return db;
   } catch (error) {
     console.error('❌ MongoDB connection error:', error);
     throw error;
+  }
+}
+
+// Ensures the compound index {type, date} exists on the entries collection.
+// createIndex() is a no-op if the index already exists, so this is safe to
+// run on every startup. The index is critical for fast analytics over long
+// date ranges (7d/14d/30d) on large Nightscout databases.
+async function ensureIndexes(database: Db): Promise<void> {
+  try {
+    await database.collection('entries').createIndex(
+      { type: 1, date: 1 },
+      { background: true, name: 'idx_type_date' }
+    );
+    console.log('📑 Indexes verified (entries: type+date)');
+  } catch (error: any) {
+    // Non-fatal — queries will still work, just slower
+    console.warn('⚠️  Could not ensure indexes:', error.message);
   }
 }
 

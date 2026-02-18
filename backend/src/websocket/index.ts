@@ -1,5 +1,7 @@
 // ============================================================================
 // WebSocket Server - Real-time Glucose Updates
+// Falls back to 30-second polling when MongoDB Change Streams are unavailable
+// (Change Streams require a replica set; standalone MongoDB is polling-only)
 // ============================================================================
 
 import { Server as SocketIOServer } from 'socket.io';
@@ -26,14 +28,13 @@ export function initializeWebSocket(httpServer: HTTPServer, corsOrigin: string) 
       console.log(`❌ Client disconnected: ${socket.id}`);
     });
 
-    // Send welcome message
     socket.emit('connected', {
       message: 'Connected to Nightscout Modern WebSocket',
       timestamp: new Date().toISOString(),
     });
   });
 
-  // Set up MongoDB Change Streams for real-time updates
+  // Try Change Streams; fall back to polling if unavailable
   setupChangeStreams();
 
   console.log('🔌 WebSocket server initialized');
@@ -44,17 +45,24 @@ export function initializeWebSocket(httpServer: HTTPServer, corsOrigin: string) 
 function setupChangeStreams() {
   try {
     const db = getDatabase();
+    let failCount = 0;
+    const TOTAL_STREAMS = 3;
 
-    // Watch for new glucose entries
-    const entriesCollection = db.collection<GlucoseEntry>('entries');
-    const entriesChangeStream = entriesCollection.watch(
-      [{ $match: { 'fullDocument.type': 'sgv' } }],
-      { fullDocument: 'updateLookup' }
-    );
+    function onStreamFail(_name: string) {
+      failCount++;
+      if (failCount === TOTAL_STREAMS) {
+        console.warn('⏱  All Change Streams failed — switching to polling fallback (30s interval)');
+        startPollingFallback();
+      }
+    }
 
-    entriesChangeStream.on('change', (change) => {
+    // ── entries ───────────────────────────────────────────────────────────────
+    const entriesStream = db
+      .collection<GlucoseEntry>('entries')
+      .watch([{ $match: { 'fullDocument.type': 'sgv' } }], { fullDocument: 'updateLookup' });
+
+    entriesStream.on('change', (change) => {
       if (change.operationType === 'insert' && change.fullDocument) {
-        console.log('📊 New glucose entry detected');
         io?.emit('glucose:new', {
           type: 'glucose',
           data: change.fullDocument,
@@ -63,19 +71,19 @@ function setupChangeStreams() {
       }
     });
 
-    entriesChangeStream.on('error', (error) => {
-      console.warn('⚠️  Change Stream error (entries):', error.message);
+    entriesStream.on('error', (error) => {
+      console.warn(`⚠️  Change Stream unavailable (entries): ${error.message}`);
+      entriesStream.close().catch(() => {});
+      onStreamFail('entries');
     });
 
-    // Watch for new treatments
-    const treatmentsCollection = db.collection<Treatment>('treatments');
-    const treatmentsChangeStream = treatmentsCollection.watch([], {
-      fullDocument: 'updateLookup',
-    });
+    // ── treatments ────────────────────────────────────────────────────────────
+    const treatmentsStream = db
+      .collection<Treatment>('treatments')
+      .watch([], { fullDocument: 'updateLookup' });
 
-    treatmentsChangeStream.on('change', (change) => {
+    treatmentsStream.on('change', (change) => {
       if (change.operationType === 'insert' && change.fullDocument) {
-        console.log('💉 New treatment detected');
         io?.emit('treatment:new', {
           type: 'treatment',
           data: change.fullDocument,
@@ -84,19 +92,19 @@ function setupChangeStreams() {
       }
     });
 
-    treatmentsChangeStream.on('error', (error) => {
-      console.warn('⚠️  Change Stream error (treatments):', error.message);
+    treatmentsStream.on('error', (error) => {
+      console.warn(`⚠️  Change Stream unavailable (treatments): ${error.message}`);
+      treatmentsStream.close().catch(() => {});
+      onStreamFail('treatments');
     });
 
-    // Watch for device status updates
-    const deviceStatusCollection = db.collection<DeviceStatus>('devicestatus');
-    const deviceStatusChangeStream = deviceStatusCollection.watch([], {
-      fullDocument: 'updateLookup',
-    });
+    // ── devicestatus ──────────────────────────────────────────────────────────
+    const deviceStatusStream = db
+      .collection<DeviceStatus>('devicestatus')
+      .watch([], { fullDocument: 'updateLookup' });
 
-    deviceStatusChangeStream.on('change', (change) => {
+    deviceStatusStream.on('change', (change) => {
       if (change.operationType === 'insert' && change.fullDocument) {
-        console.log('📱 New device status detected');
         io?.emit('deviceStatus:new', {
           type: 'deviceStatus',
           data: change.fullDocument,
@@ -105,15 +113,53 @@ function setupChangeStreams() {
       }
     });
 
-    deviceStatusChangeStream.on('error', (error) => {
-      console.warn('⚠️  Change Stream error (devicestatus):', error.message);
+    deviceStatusStream.on('error', (error) => {
+      console.warn(`⚠️  Change Stream unavailable (devicestatus): ${error.message}`);
+      deviceStatusStream.close().catch(() => {});
+      onStreamFail('devicestatus');
     });
 
     console.log('👁️  MongoDB Change Streams active (real-time updates enabled)');
   } catch (error: any) {
-    console.warn('⚠️  MongoDB Change Streams not available (requires replica set)');
-    console.warn('💡 Real-time updates disabled. Frontend will use polling instead.');
+    console.warn('⚠️  Could not set up Change Streams:', error.message);
+    startPollingFallback();
   }
+}
+
+// ============================================================================
+// Polling fallback — used when MongoDB is standalone (no replica set)
+// Checks for new glucose entries every 30 seconds and emits via WebSocket.
+// ============================================================================
+function startPollingFallback() {
+  let lastSeenDate = Date.now();
+
+  const poll = async () => {
+    try {
+      const db = getDatabase();
+      const entries = await db
+        .collection<GlucoseEntry>('entries')
+        .find({ type: 'sgv', date: { $gt: lastSeenDate } })
+        .sort({ date: -1 })
+        .limit(10)
+        .toArray();
+
+      if (entries.length > 0) {
+        // Update cursor to the newest entry seen
+        lastSeenDate = Math.max(...entries.map((e) => Number(e.date)));
+        // Emit newest entry only
+        const newest = entries.reduce((a, b) => (Number(a.date) > Number(b.date) ? a : b));
+        io?.emit('glucose:new', {
+          type: 'glucose',
+          data: newest,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch {
+      // Silently ignore transient polling errors
+    }
+  };
+
+  setInterval(poll, 30_000);
 }
 
 export function getSocketIO(): SocketIOServer | null {
