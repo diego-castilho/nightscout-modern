@@ -20,7 +20,6 @@ import {
   ComposedChart,
   Area,
   Line,
-  Scatter,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -180,29 +179,30 @@ function TreatmentTooltipContent({ treatment, unit }: { treatment: Treatment; un
   );
 }
 
-// ── Custom SVG shape for treatment Scatter points ─────────────────────────────
+// ── Custom SVG label for treatment ReferenceLine markers ─────────────────────
+// Recharts passes viewBox (SVG pixel coords) to the label element via cloneElement.
+// x = pixel position of the reference line; y+height = bottom of the plot area.
 
-interface TreatmentShapeProps {
-  cx?: number;
-  cy?: number;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  payload?: any;
+interface TreatmentLabelProps {
+  viewBox?: { x: number; y: number; width: number; height: number };
+  treatment: Treatment;
   onEnter: (treatment: Treatment, cx: number, cy: number) => void;
   onLeave: () => void;
 }
 
-function TreatmentShape({ cx = 0, cy = 0, payload, onEnter, onLeave }: TreatmentShapeProps) {
-  if (!payload?.isTreatment || !payload.treatment) return null;
-  const cfg = TREATMENT_VISUAL[payload.treatment.eventType];
+function TreatmentLabel({ viewBox, treatment, onEnter, onLeave }: TreatmentLabelProps) {
+  if (!viewBox) return null;
+  const cfg = TREATMENT_VISUAL[treatment.eventType];
   if (!cfg) return null;
+  const cx = viewBox.x;
+  const cy = viewBox.y + viewBox.height - 12; // 12px above bottom of plot area
 
   return (
     <g
-      onMouseEnter={() => onEnter(payload.treatment, cx, cy)}
+      onMouseEnter={() => onEnter(treatment, cx, cy)}
       onMouseLeave={onLeave}
       style={{ cursor: 'pointer' }}
     >
-      {/* White ring for contrast against all chart backgrounds */}
       <circle cx={cx} cy={cy} r={9}   fill="white"    opacity={0.75} />
       <circle cx={cx} cy={cy} r={7.5} fill={cfg.color} opacity={0.92} />
       <text
@@ -232,9 +232,6 @@ interface CustomTooltipProps {
 function CustomTooltip({ active, payload, unit, thresholds }: CustomTooltipProps) {
   if (!active || !payload?.length) return null;
   const point = payload[0].payload;
-
-  // Treatment markers use their own HTML overlay — suppress Recharts tooltip
-  if (point?.isTreatment) return null;
 
   const isPrediction = point.sgv == null && point.sgvPredicted != null;
   const value = isPrediction ? point.sgvPredicted! : (point.sgv ?? 0);
@@ -348,21 +345,13 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
   // ── Treatment marker points ─────────────────────────────────────────────────
   const displayStart = zoomedDomain ? zoomedDomain[0] : (data[0]?.time ?? 0);
   const displayEnd   = zoomedDomain ? zoomedDomain[1] : (chartData[chartData.length - 1]?.time ?? Date.now());
-  const markerY = minVal + (maxVal - minVal) * 0.05; // 5% from bottom edge
 
-  const treatmentPoints = treatments
-    .filter((t) => {
-      const ts = new Date(t.created_at).getTime();
-      return ts >= displayStart && ts <= displayEnd;
-    })
-    .map((t) => ({
-      time:        new Date(t.created_at).getTime(),
-      markerY,
-      isTreatment: true as const,
-      treatment:   t,
-    }));
+  const visibleTreatments = treatments.filter((t) => {
+    const ts = new Date(t.created_at).getTime();
+    return ts >= displayStart && ts <= displayEnd;
+  });
 
-  const visibleEventTypes = [...new Set(treatmentPoints.map((p) => p.treatment.eventType))];
+  const visibleEventTypes = [...new Set(visibleTreatments.map((t) => t.eventType))];
 
   // Tick config
   const { ticks: baseTicks, formatStr: baseFormatStr } = getTickConfig(
@@ -417,16 +406,6 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
 
   const selectionFill   = darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
   const selectionStroke = darkMode ? 'rgba(255,255,255,0.4)'  : 'rgba(0,0,0,0.3)';
-
-  // Treatment shape renderer — closes over the state setter
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const treatmentShape = (props: any) => (
-    <TreatmentShape
-      {...props}
-      onEnter={(t: Treatment, cx: number, cy: number) => setTreatmentTooltip({ treatment: t, cx, cy })}
-      onLeave={() => setTreatmentTooltip(null)}
-    />
-  );
 
   return (
     <Card>
@@ -561,15 +540,23 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
                 />
               )}
 
-              {/* Treatment markers — Scatter with custom SVG shapes */}
-              {showTreatments && treatmentPoints.length > 0 && (
-                <Scatter
-                  data={treatmentPoints}
-                  dataKey="markerY"
-                  shape={treatmentShape}
-                  isAnimationActive={false}
+              {/* Treatment markers — one ReferenceLine per treatment (stroke="none"
+                  so it doesn't affect tooltip or XAxis domain). Recharts passes
+                  viewBox to the label element via cloneElement, giving exact
+                  SVG pixel coords for the marker icon placement. */}
+              {showTreatments && visibleTreatments.map((t) => (
+                <ReferenceLine
+                  key={t._id}
+                  x={new Date(t.created_at).getTime()}
+                  stroke="none"
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  label={(<TreatmentLabel
+                    treatment={t}
+                    onEnter={(tr, cx, cy) => setTreatmentTooltip({ treatment: tr, cx, cy })}
+                    onLeave={() => setTreatmentTooltip(null)}
+                  />) as any}
                 />
-              )}
+              ))}
 
               {/* Selection highlight during drag-to-zoom */}
               {zoomLeft !== null && zoomRight !== null && (
@@ -603,7 +590,7 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
         </div>
 
         {/* Legend — shown only when treatment markers are present in the visible window */}
-        {showTreatments && visibleEventTypes.length > 0 && (
+        {showTreatments && visibleTreatments.length > 0 && (
           <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-2 pt-2 border-t border-border/50">
             {Object.entries(TREATMENT_VISUAL)
               .filter(([type]) => visibleEventTypes.includes(type))
