@@ -1,11 +1,13 @@
 # Integração ao Docker Compose Principal
 
+> Ajuste os IPs adequadamente para seu ambiente. Os exemplos abaixo usam a faixa `192.168.1.0/24` como referência.
+
 Se você preferir manter tudo em um único `docker-compose.yml` ao invés de um arquivo separado, use os snippets abaixo.
 
-## Opção 1: Arquivo separado (recomendado para desenvolvimento)
+## Opção 1: Arquivo separado (recomendado)
 
 ```bash
-cd /home/dcastilho/nightscout-modern
+cd /caminho/para/nightscout-modern
 docker compose up -d
 ```
 
@@ -15,35 +17,35 @@ docker compose up -d
 
 ## Opção 2: Adicionar ao compose principal
 
-Adicione ao seu `docker-compose.yml` principal:
+Adicione ao seu `docker-compose.yml` principal (ajuste os IPs adequadamente para seu ambiente):
 
 ```yaml
   # ── Nightscout Modern ──────────────────────────────────────────────────────
 
   nightscout-modern-backend:
     build:
-      context: /home/dcastilho/nightscout-modern
+      context: /caminho/para/nightscout-modern
       dockerfile: docker/Dockerfile.backend
     container_name: nightscout-modern-backend
     hostname: nightscout-modern-backend
     restart: unless-stopped
     networks:
       macvlan:
-        ipv4_address: 10.0.0.229
+        ipv4_address: 192.168.1.10    # ← IP livre para o backend na sua rede
     dns:
-      - 10.0.0.4
+      - 192.168.1.1                   # ← seu gateway/DNS
     environment:
       NODE_ENV: production
       PORT: 3001
       TZ: ${TZ:-America/Sao_Paulo}
-      MONGODB_URI: mongodb://10.0.0.225:27017
-      MONGODB_DB_NAME: test
+      MONGODB_URI: mongodb://192.168.1.100:27017   # ← IP do MongoDB
+      MONGODB_DB_NAME: nightscout
       MONGODB_USER: ${MONGODB_USER:-}
       MONGODB_PASSWORD: ${MONGODB_PASSWORD:-}
       API_SECRET: ${NIGHTSCOUT_API_SECRET}
       JWT_SECRET: ${NIGHTSCOUT_MODERN_JWT_SECRET}
       JWT_EXPIRES_IN: 7d
-      CORS_ORIGIN: http://10.0.0.231
+      CORS_ORIGIN: http://192.168.1.11             # ← IP do frontend
       LOG_LEVEL: info
     deploy:
       resources:
@@ -59,18 +61,18 @@ Adicione ao seu `docker-compose.yml` principal:
 
   nightscout-modern-frontend:
     build:
-      context: /home/dcastilho/nightscout-modern
+      context: /caminho/para/nightscout-modern
       dockerfile: docker/Dockerfile.frontend
       args:
-        VITE_API_URL: http://10.0.0.229:3001/api
+        VITE_API_URL: http://192.168.1.10:3001/api  # ← IP do backend acima
     container_name: nightscout-modern-frontend
     hostname: nightscout-modern-frontend
     restart: unless-stopped
     networks:
       macvlan:
-        ipv4_address: 10.0.0.231
+        ipv4_address: 192.168.1.11    # ← IP livre para o frontend na sua rede
     dns:
-      - 10.0.0.4
+      - 192.168.1.1                   # ← seu gateway/DNS
     environment:
       TZ: ${TZ:-America/Sao_Paulo}
     deploy:
@@ -102,7 +104,7 @@ NIGHTSCOUT_MODERN_JWT_SECRET=string-aleatoria-longa-aqui
 ## Build e start
 
 ```bash
-cd /home/dcastilho/Docker
+cd /caminho/para/seu/docker-compose-principal
 docker compose up -d nightscout-modern-backend nightscout-modern-frontend
 ```
 
@@ -110,10 +112,10 @@ docker compose up -d nightscout-modern-backend nightscout-modern-frontend
 
 ```bash
 # Pull do repositório
-cd /home/dcastilho/nightscout-modern && git pull
+cd /caminho/para/nightscout-modern && git pull
 
 # Rebuild
-cd /home/dcastilho/Docker
+cd /caminho/para/seu/docker-compose-principal
 docker compose build nightscout-modern-frontend nightscout-modern-backend
 docker compose up -d --force-recreate nightscout-modern-frontend nightscout-modern-backend
 ```

@@ -21,9 +21,9 @@ nano backend/.env
 Variáveis obrigatórias no `backend/.env`:
 
 ```bash
-# MongoDB do Nightscout
-MONGODB_URI=mongodb://10.0.0.225:27017
-MONGODB_DB_NAME=test                        # banco padrão do Nightscout
+# MongoDB do Nightscout (ajuste o IP adequadamente para seu ambiente)
+MONGODB_URI=mongodb://192.168.1.100:27017
+MONGODB_DB_NAME=nightscout                  # banco padrão do Nightscout
 MONGODB_USER=                               # deixe vazio se sem auth
 MONGODB_PASSWORD=
 
@@ -31,29 +31,29 @@ MONGODB_PASSWORD=
 API_SECRET=seu-api-secret-do-nightscout
 JWT_SECRET=qualquer-string-aleatoria-longa
 
-# CORS — IPs/domínios do frontend
-CORS_ORIGIN=http://10.0.0.231
+# CORS — IP/domínio do frontend (ajuste para seu ambiente)
+CORS_ORIGIN=http://192.168.1.11
 ```
 
 O frontend não precisa de `.env` próprio — o IP do backend é fixado em tempo de build via `docker-compose.yml`.
 
 ### 2. Ajustar IPs no docker-compose.yml
 
-Abra `docker-compose.yml` e edite os IPs MacVLAN conforme sua rede:
+Abra `docker-compose.yml` e edite os IPs MacVLAN conforme sua rede (ajuste os IPs adequadamente para seu ambiente):
 
 ```yaml
 nightscout-modern-backend:
   networks:
     macvlan:
-      ipv4_address: 10.0.0.229   # ← seu IP livre para o backend
+      ipv4_address: 192.168.1.10   # ← seu IP livre para o backend
 
 nightscout-modern-frontend:
   build:
     args:
-      VITE_API_URL: http://10.0.0.229:3001/api   # ← IP do backend acima
+      VITE_API_URL: http://192.168.1.10:3001/api   # ← IP do backend acima
   networks:
     macvlan:
-      ipv4_address: 10.0.0.231   # ← seu IP livre para o frontend
+      ipv4_address: 192.168.1.11   # ← seu IP livre para o frontend
 ```
 
 ### 3. Build e start
@@ -68,16 +68,16 @@ docker compose logs -f          # acompanhe os logs
 
 ```bash
 # Backend saudável
-curl http://10.0.0.229:3001/api/health
+curl http://192.168.1.10:3001/api/health
 
 # Última leitura de glicose
-curl http://10.0.0.229:3001/api/glucose/latest
+curl http://192.168.1.10:3001/api/glucose/latest
 
 # Configurações (unit, patientName, thresholds)
-curl http://10.0.0.229:3001/api/settings
+curl http://192.168.1.10:3001/api/settings
 ```
 
-Acesse o frontend pelo browser: `http://10.0.0.231`
+Acesse o frontend pelo browser: `http://192.168.1.11`
 
 As configurações (unidade, nome do paciente, thresholds) podem ser ajustadas na página **Configurações** do dashboard e são persistidas no MongoDB — compartilhadas entre todos os dispositivos.
 
@@ -133,7 +133,7 @@ docker compose logs nightscout-modern-frontend
 ```bash
 # Entre no container e teste a conexão
 docker exec -it nightscout-modern-backend sh
-wget -O- http://10.0.0.225:27017
+wget -O- http://192.168.1.100:27017
 ```
 
 Verifique:
@@ -145,7 +145,7 @@ Verifique:
 
 ```bash
 # Teste o backend diretamente
-curl http://10.0.0.229:3001/api/health
+curl http://192.168.1.10:3001/api/health
 
 # Verifique se o CORS_ORIGIN inclui o IP do frontend
 # Verifique o console do browser (F12 → Network)
@@ -167,13 +167,13 @@ Adicione ao seu tunnel:
 ```yaml
 ingress:
   - hostname: nightscout-modern.seudominio.com
-    service: http://10.0.0.231
+    service: http://192.168.1.11
 ```
 
 Atualize o `CORS_ORIGIN` no `backend/.env`:
 
 ```bash
-CORS_ORIGIN=http://10.0.0.231,https://nightscout-modern.seudominio.com
+CORS_ORIGIN=http://192.168.1.11,https://nightscout-modern.seudominio.com
 ```
 
 Rebuild o backend:

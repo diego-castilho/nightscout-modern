@@ -12,7 +12,7 @@ Interface moderna, responsiva e rica em recursos para monitoramento contínuo de
 
 **Backend**
 - Node.js 20 + Express + TypeScript
-- Acesso direto ao MongoDB do Nightscout (banco `test`)
+- Acesso direto ao MongoDB do Nightscout (banco `nightscout`)
 - API REST completa (glucose, analytics, patterns, settings)
 - Persistência de configurações no servidor (compartilhada entre dispositivos)
 - Analytics engine:
@@ -78,7 +78,7 @@ Interface moderna, responsiva e rica em recursos para monitoramento contínuo de
 │  - Dashboard em tempo real          │
 │  - Gráficos Recharts                │
 │  - PWA / Service Worker             │
-│  Nginx  →  http://10.0.0.231        │
+│  Nginx  →  http://192.168.1.11       │
 └────────────┬────────────────────────┘
              │ REST API
 ┌────────────▼────────────────────────┐
@@ -86,12 +86,12 @@ Interface moderna, responsiva e rica em recursos para monitoramento contínuo de
 │  - API REST endpoints               │
 │  - Analytics engine                 │
 │  - Persistência de settings         │
-│  Node.js  →  http://10.0.0.229:3001 │
+│  Node.js  →  http://192.168.1.10:3001│
 └────────────┬────────────────────────┘
              │
 ┌────────────▼────────────────────────┐
-│  MongoDB  10.0.0.225:27017          │
-│  database: test (Nightscout)        │
+│  MongoDB  192.168.1.100:27017       │
+│  database: nightscout               │
 │  - entries (glucose readings)       │
 │  - treatments                       │
 │  - devicestatus                     │
@@ -129,10 +129,10 @@ docker compose up -d
 docker compose logs -f
 ```
 
-**Acesso:**
-- Frontend: `http://10.0.0.231`
-- Backend API: `http://10.0.0.229:3001/api`
-- Health check: `http://10.0.0.229:3001/api/health`
+**Acesso** (ajuste os IPs adequadamente para seu ambiente):
+- Frontend: `http://192.168.1.11`
+- Backend API: `http://192.168.1.10:3001/api`
+- Health check: `http://192.168.1.10:3001/api/health`
 
 ### Desenvolvimento Local
 
@@ -181,16 +181,16 @@ PUT /api/settings        — Salvar configurações (unit, patientName, refreshI
 ```
 
 ```bash
-# Exemplo: analytics com thresholds customizados
-curl "http://10.0.0.229:3001/api/analytics?startDate=2025-01-01T00:00:00Z&endDate=2025-01-02T00:00:00Z&veryLow=60&low=80&high=160&veryHigh=240"
+# Exemplo: analytics com thresholds customizados (ajuste o IP do backend)
+curl "http://192.168.1.10:3001/api/analytics?startDate=2025-01-01T00:00:00Z&endDate=2025-01-02T00:00:00Z&veryLow=60&low=80&high=160&veryHigh=240"
 
 # Última leitura
-curl http://10.0.0.229:3001/api/glucose/latest
+curl http://192.168.1.10:3001/api/glucose/latest
 
 # Salvar configurações
-curl -X PUT http://10.0.0.229:3001/api/settings \
+curl -X PUT http://192.168.1.10:3001/api/settings \
   -H "Content-Type: application/json" \
-  -d '{"unit":"mmol","patientName":"Diego","refreshInterval":5}'
+  -d '{"unit":"mmol","patientName":"Seu Nome","refreshInterval":5}'
 ```
 
 ---

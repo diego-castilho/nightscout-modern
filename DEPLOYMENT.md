@@ -1,16 +1,21 @@
-# Nightscout Modern - Deployment
+# Nightscout Modern - Guia de Deployment
 
-## Status
+> Ajuste os IPs adequadamente para seu ambiente. Os exemplos abaixo usam a faixa `192.168.1.0/24` como referência.
 
-**Última atualização:** 17/02/2026
+---
 
-### Endereços
+## Endereços de referência
 
-| Serviço | IP | URL | Status |
-|---------|-------|-----|--------|
-| **Backend API** | 10.0.0.229:3001 | http://10.0.0.229:3001/api | Healthy |
-| **Frontend Web** | 10.0.0.231 | http://10.0.0.231 | Running |
-| **Acesso externo** | — | https://diabetes1.diegocastilho.me | Cloudflare Tunnel |
+| Serviço | IP de exemplo | URL |
+|---------|---------------|-----|
+| **MongoDB** | 192.168.1.100:27017 | — (acesso interno) |
+| **Backend API** | 192.168.1.10:3001 | http://192.168.1.10:3001/api |
+| **Frontend Web** | 192.168.1.11 | http://192.168.1.11 |
+
+Estes IPs são apenas exemplos. Defina IPs livres na sua rede local e ajuste:
+- `docker-compose.yml` (campos `ipv4_address`)
+- `backend/.env` (`MONGODB_URI`, `CORS_ORIGIN`)
+- `docker-compose.yml` build arg `VITE_API_URL`
 
 ---
 
@@ -19,10 +24,10 @@
 ### De outro dispositivo na rede (celular, tablet, outro computador):
 ```bash
 # Frontend (interface web)
-http://10.0.0.231
+http://192.168.1.11
 
 # Backend API (para testes)
-http://10.0.0.229:3001/api/health
+http://192.168.1.10:3001/api/health
 ```
 
 ### Do próprio host Docker:
@@ -30,8 +35,8 @@ http://10.0.0.229:3001/api/health
 
 Opções:
 1. Acesse de outro dispositivo na mesma rede
-2. Use o acesso externo via Cloudflare Tunnel
-3. Teste via outro container: `docker exec nightscout-modern-backend wget -qO- http://10.0.0.231`
+2. Use acesso externo via Cloudflare Tunnel
+3. Teste via outro container: `docker exec nightscout-modern-backend wget -qO- http://192.168.1.11`
 
 ---
 
@@ -39,19 +44,19 @@ Opções:
 
 ```bash
 # Health check
-curl http://10.0.0.229:3001/api/health
+curl http://192.168.1.10:3001/api/health
 
 # Stats do banco de dados
-curl http://10.0.0.229:3001/api/stats
+curl http://192.168.1.10:3001/api/stats
 
 # Última glicose
-curl http://10.0.0.229:3001/api/glucose/latest
+curl http://192.168.1.10:3001/api/glucose/latest
 
 # Analytics das últimas 24h com thresholds customizados
-curl "http://10.0.0.229:3001/api/analytics?startDate=$(date -u -d '24 hours ago' +%FT%TZ)&endDate=$(date -u +%FT%TZ)&veryLow=54&low=70&high=180&veryHigh=250"
+curl "http://192.168.1.10:3001/api/analytics?startDate=$(date -u -d '24 hours ago' +%FT%TZ)&endDate=$(date -u +%FT%TZ)&veryLow=54&low=70&high=180&veryHigh=250"
 
 # Configurações salvas
-curl http://10.0.0.229:3001/api/settings
+curl http://192.168.1.10:3001/api/settings
 
 # Ver logs
 docker compose logs -f nightscout-modern-backend
@@ -120,26 +125,32 @@ docker compose build && docker compose up -d --force-recreate
 
 ## Cloudflare Tunnel (Acesso Externo)
 
-Configuração atual no tunnel:
+Adicione ao arquivo de configuração do tunnel:
 
 ```yaml
 ingress:
-  - hostname: diabetes1.diegocastilho.me
-    service: http://10.0.0.231
+  - hostname: nightscout-modern.seudominio.com
+    service: http://192.168.1.11
 ```
 
 Backend `.env`:
 ```bash
-CORS_ORIGIN=http://10.0.0.231,https://diabetes1.diegocastilho.me
+CORS_ORIGIN=http://192.168.1.11,https://nightscout-modern.seudominio.com
+```
+
+Rebuild o backend após alterar:
+```bash
+docker compose build nightscout-modern-backend
+docker compose up -d --force-recreate nightscout-modern-backend
 ```
 
 ---
 
 ## Notas Importantes
 
-1. **MongoDB Change Streams**: Desabilitados — MongoDB não está em replica set. Updates em tempo real funcionam via polling (auto-refresh configurável).
+1. **MongoDB Change Streams**: Requerem replica set. Em MongoDB standalone, updates em tempo real funcionam via polling a cada 30 segundos (fallback automático).
 
-2. **Acesso do Host**: Por limitação do MacVLAN, o host não acessa diretamente os IPs 10.0.0.229 e 10.0.0.231. Use outro dispositivo ou o Cloudflare Tunnel.
+2. **Acesso do Host**: Por limitação do MacVLAN, o host não acessa diretamente os IPs dos containers. Use outro dispositivo na rede ou o Cloudflare Tunnel.
 
 3. **Configurações multi-dispositivo**: As configurações (thresholds, unidade, nome) são persistidas no MongoDB e compartilhadas entre todos os dispositivos que acessam o dashboard.
 
@@ -147,12 +158,14 @@ CORS_ORIGIN=http://10.0.0.231,https://diabetes1.diegocastilho.me
    - `API_SECRET` — igual ao Nightscout API Secret
    - `JWT_SECRET` — string aleatória longa
 
+5. **Índice automático**: Na primeira inicialização o backend cria o índice `{type, date}` na coleção `entries` para acelerar queries de analytics. É uma operação idempotente (seguro executar novamente).
+
 ---
 
 ## PWA (Progressive Web App)
 
 O frontend é um PWA instalável no celular:
-1. Acesse http://10.0.0.231 (ou https://diabetes1.diegocastilho.me) no celular
+1. Acesse `http://192.168.1.11` (ou seu domínio externo) no celular
 2. Menu do navegador → "Adicionar à tela inicial"
 3. Use como app nativo com cache offline
 
@@ -163,4 +176,4 @@ O frontend é um PWA instalável no celular:
 - Frontend: React 18 + TypeScript + Vite + Tailwind CSS + shadcn/ui
 - Backend: Node.js 20 + Express + TypeScript
 - Database: MongoDB (Nightscout existente)
-- Deploy: Docker + MacVLAN + Cloudflare Tunnel
+- Deploy: Docker + MacVLAN + Cloudflare Tunnel (opcional)
