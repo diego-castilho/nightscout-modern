@@ -14,7 +14,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select } from '../components/ui/select';
 import { Button } from '../components/ui/button';
-import { User, SlidersHorizontal, RefreshCw, RotateCcw } from 'lucide-react';
+import { User, SlidersHorizontal, RefreshCw, RotateCcw, Syringe } from 'lucide-react';
 
 const DEFAULT_THRESHOLDS_MGDL: AlarmThresholds = {
   veryLow: 54, low: 70, high: 180, veryHigh: 250,
@@ -29,12 +29,24 @@ const REFRESH_OPTIONS = [
   { value: 30, label: '30 minutos' },
 ];
 
+const DIA_OPTIONS = [
+  { value: 2,   label: '2 horas' },
+  { value: 2.5, label: '2,5 horas' },
+  { value: 3,   label: '3 horas (padrão)' },
+  { value: 3.5, label: '3,5 horas' },
+  { value: 4,   label: '4 horas' },
+  { value: 4.5, label: '4,5 horas' },
+  { value: 5,   label: '5 horas' },
+  { value: 6,   label: '6 horas' },
+];
+
 export function SettingsPage() {
   const {
     unit, setUnit,
     patientName, setPatientName,
     refreshInterval, setRefreshInterval,
     alarmThresholds, setAlarmThresholds,
+    dia, setDia,
   } = useDashboardStore();
 
   // Local threshold state (shown in selected unit)
@@ -67,6 +79,11 @@ export function SettingsPage() {
   function handleRefreshIntervalChange(minutes: number) {
     setRefreshInterval(minutes);
     saveSettings({ refreshInterval: minutes }).catch(() => {});
+  }
+
+  function handleDiaChange(hours: number) {
+    setDia(hours);
+    saveSettings({ dia: hours }).catch(() => {});
   }
 
   function handleThresholdChange(
@@ -217,6 +234,30 @@ export function SettingsPage() {
                   </option>
                 ))}
               </Select>
+            </div>
+
+            {/* DIA — Duration of Insulin Action */}
+            <div className="space-y-1.5">
+              <Label htmlFor="dia">
+                <Syringe className="inline h-3.5 w-3.5 mr-1" />
+                Duração da ação da insulina (DIA)
+              </Label>
+              <Select
+                id="dia"
+                value={String(dia)}
+                onChange={(e) => handleDiaChange(Number(e.target.value))}
+                className="max-w-[180px]"
+              >
+                {DIA_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Usado para calcular o IOB (Insulina Ativa). Varia por tipo de insulina:
+                análogos rápidos ~3h, regular ~5h.
+              </p>
             </div>
           </CardContent>
         </Card>

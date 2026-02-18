@@ -200,6 +200,7 @@ export interface AppSettings {
   unit?: 'mgdl' | 'mmol';
   patientName?: string;
   refreshInterval?: number;
+  dia?: number;
   alarmThresholds?: {
     veryLow: number;
     low: number;
