@@ -3,8 +3,11 @@
 // Colors follow TIR zones: veryHigh=red, high=amber, inRange=green,
 // low=orange, veryLow=red. Gradient offsets are computed dynamically
 // from the actual Y-axis range so zone boundaries are pixel-accurate.
+// Supports drag-to-zoom: drag horizontally to select a time range.
+// Double-click or "Reset" button restores the full view.
 // ============================================================================
 
+import { useState } from 'react';
 import {
   ComposedChart,
   Area,
@@ -13,10 +16,12 @@ import {
   CartesianGrid,
   Tooltip,
   ReferenceLine,
+  ReferenceArea,
   ResponsiveContainer,
 } from 'recharts';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { ZoomOut } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import type { GlucoseEntry } from '../../lib/api';
 import { useDashboardStore, type Period, type AlarmThresholds } from '../../stores/dashboardStore';
@@ -103,6 +108,15 @@ function getTickConfig(period: Period, start: number, end: number) {
   return { ticks, formatStr };
 }
 
+// X-axis tick config when zoomed (based on visible duration)
+function getZoomedTickConfig(domainMs: number): { intervalMs: number; formatStr: string } {
+  if (domainMs <= 2 * 3600_000)   return { intervalMs: 5 * 60_000,        formatStr: 'HH:mm' };
+  if (domainMs <= 6 * 3600_000)   return { intervalMs: 15 * 60_000,       formatStr: 'HH:mm' };
+  if (domainMs <= 12 * 3600_000)  return { intervalMs: 30 * 60_000,       formatStr: 'HH:mm' };
+  if (domainMs <= 24 * 3600_000)  return { intervalMs: 60 * 60_000,       formatStr: 'HH:mm' };
+  return { intervalMs: 24 * 3600_000, formatStr: 'dd/MM' };
+}
+
 interface CustomTooltipProps {
   active?: boolean;
   payload?: Array<{ payload: ChartPoint }>;
@@ -130,7 +144,15 @@ function CustomTooltip({ active, payload, unit, thresholds }: CustomTooltipWithU
 }
 
 export function GlucoseAreaChart({ entries, loading }: Props) {
-  const { period, unit, alarmThresholds } = useDashboardStore();
+  const { period, unit, alarmThresholds, darkMode } = useDashboardStore();
+
+  // Zoom state
+  const [zoomLeft, setZoomLeft]     = useState<number | null>(null);
+  const [zoomRight, setZoomRight]   = useState<number | null>(null);
+  const [zoomedDomain, setZoomedDomain] = useState<[number, number] | null>(null);
+  const isZoomed = zoomedDomain !== null;
+
+  const resetZoom = () => setZoomedDomain(null);
 
   if (loading) {
     return (
@@ -163,9 +185,28 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
   const minVal = Math.max(0, rawMin - 20);
   const maxVal = Math.min(400, rawMax + 30);
 
-  const { ticks, formatStr } = getTickConfig(period, data[0].time, data[data.length - 1].time);
-  const showDots = data.length <= 20;
+  // Active ticks/format — adapts when zoomed
+  const { ticks: baseTicks, formatStr: baseFormatStr } = getTickConfig(
+    period, data[0].time, data[data.length - 1].time
+  );
 
+  let activeTicks: number[];
+  let activeFormatStr: string;
+
+  if (zoomedDomain) {
+    const domainMs = zoomedDomain[1] - zoomedDomain[0];
+    const { intervalMs, formatStr: zFs } = getZoomedTickConfig(domainMs);
+    const zTicks: number[] = [];
+    const firstTick = Math.ceil(zoomedDomain[0] / intervalMs) * intervalMs;
+    for (let t = firstTick; t <= zoomedDomain[1]; t += intervalMs) zTicks.push(t);
+    activeTicks = zTicks;
+    activeFormatStr = zFs;
+  } else {
+    activeTicks = baseTicks;
+    activeFormatStr = baseFormatStr;
+  }
+
+  const showDots = data.length <= 20;
   const strokeStops = buildStrokeStops(minVal, maxVal, alarmThresholds);
 
   // Reference lines only if threshold is within the Y range
@@ -176,91 +217,160 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
     { y: alarmThresholds.veryLow,  color: ZONE.veryLow,  label: String(alarmThresholds.veryLow),  dash: '2 4' },
   ].filter((r) => r.y > minVal && r.y < maxVal);
 
+  // Zoom event handlers
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleMouseDown = (e: any) => {
+    const time = e?.activePayload?.[0]?.payload?.time;
+    if (time !== undefined) setZoomLeft(time as number);
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleMouseMove = (e: any) => {
+    if (zoomLeft !== null) {
+      const time = e?.activePayload?.[0]?.payload?.time;
+      if (time !== undefined) setZoomRight(time as number);
+    }
+  };
+
+  const handleMouseUp = () => {
+    if (zoomLeft !== null && zoomRight !== null) {
+      const l = Math.min(zoomLeft, zoomRight);
+      const r = Math.max(zoomLeft, zoomRight);
+      if (r - l > 60_000) setZoomedDomain([l, r]); // minimum 1 minute
+    }
+    setZoomLeft(null);
+    setZoomRight(null);
+  };
+
+  const selectionFill = darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  const selectionStroke = darkMode ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.3)';
+
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Leituras de Glicose</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base">Leituras de Glicose</CardTitle>
+          {isZoomed && (
+            <button
+              onClick={resetZoom}
+              className="flex items-center gap-1 text-xs px-2 py-1 rounded-md
+                         bg-muted hover:bg-muted/80 border border-border
+                         text-muted-foreground transition-colors"
+            >
+              <ZoomOut className="h-3 w-3" />
+              Reset zoom
+            </button>
+          )}
+        </div>
+        {!isZoomed && (
+          <p className="text-xs text-muted-foreground">
+            Arraste para ampliar um intervalo · Duplo clique para resetar
+          </p>
+        )}
       </CardHeader>
       <CardContent className="pt-0">
-        <ResponsiveContainer width="100%" height={280}>
-          <ComposedChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-            <defs>
-              {/* Stroke gradient — color changes at exact TIR zone boundaries */}
-              <linearGradient id="glStroke" x1="0" y1="0" x2="0" y2="1">
-                {strokeStops.map((s, i) => (
-                  <stop key={i} offset={s.offset} stopColor={s.color} stopOpacity={0.95} />
-                ))}
-              </linearGradient>
+        <div style={{ cursor: zoomLeft !== null ? 'ew-resize' : 'crosshair' }}>
+          <ResponsiveContainer width="100%" height={280}>
+            <ComposedChart
+              data={data}
+              margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onDoubleClick={resetZoom}
+            >
+              <defs>
+                {/* Stroke gradient — color changes at exact TIR zone boundaries */}
+                <linearGradient id="glStroke" x1="0" y1="0" x2="0" y2="1">
+                  {strokeStops.map((s, i) => (
+                    <stop key={i} offset={s.offset} stopColor={s.color} stopOpacity={0.95} />
+                  ))}
+                </linearGradient>
 
-              {/* Fill gradient — same zones, very light opacity */}
-              <linearGradient id="glFill" x1="0" y1="0" x2="0" y2="1">
-                {strokeStops.map((s, i) => {
-                  // Lighter at bottom for depth effect
-                  const frac = parseFloat(s.offset) / 100;
-                  const op = Math.max(0.02, 0.20 - frac * 0.16);
-                  return <stop key={i} offset={s.offset} stopColor={s.color} stopOpacity={op} />;
-                })}
-              </linearGradient>
-            </defs>
+                {/* Fill gradient — same zones, very light opacity */}
+                <linearGradient id="glFill" x1="0" y1="0" x2="0" y2="1">
+                  {strokeStops.map((s, i) => {
+                    // Lighter at bottom for depth effect
+                    const frac = parseFloat(s.offset) / 100;
+                    const op = Math.max(0.02, 0.20 - frac * 0.16);
+                    return <stop key={i} offset={s.offset} stopColor={s.color} stopOpacity={op} />;
+                  })}
+                </linearGradient>
+              </defs>
 
-            <CartesianGrid
-              strokeDasharray="3 3"
-              stroke="currentColor"
-              className="text-border"
-              opacity={0.3}
-            />
-
-            <XAxis
-              dataKey="time"
-              type="number"
-              scale="time"
-              domain={['dataMin', 'dataMax']}
-              ticks={ticks}
-              tickFormatter={(ms: number) => format(new Date(ms), formatStr, { locale: ptBR })}
-              tick={{ fontSize: 11, fill: 'currentColor' }}
-              className="text-muted-foreground"
-            />
-
-            <YAxis
-              domain={[minVal, maxVal]}
-              tick={{ fontSize: 11, fill: 'currentColor' }}
-              className="text-muted-foreground"
-              width={unit === 'mmol' ? 44 : 40}
-              tickFormatter={(v: number) => formatGlucose(v, unit)}
-            />
-
-            <Tooltip content={<CustomTooltip unit={unit} thresholds={alarmThresholds} />} />
-
-            {/* TIR zone reference lines */}
-            {refLines.map((r) => (
-              <ReferenceLine
-                key={r.y}
-                y={r.y}
-                stroke={r.color}
-                strokeDasharray={r.dash}
-                strokeWidth={1.5}
-                label={{
-                  value: `${formatGlucose(r.y, unit)}`,
-                  position: r.y >= 180 ? 'insideTopRight' : 'insideBottomRight',
-                  fontSize: 10,
-                  fill: r.color,
-                }}
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="currentColor"
+                className="text-border"
+                opacity={0.3}
               />
-            ))}
 
-            <Area
-              type="monotone"
-              dataKey="sgv"
-              stroke="url(#glStroke)"
-              strokeWidth={2}
-              fill="url(#glFill)"
-              dot={showDots ? { r: 2.5, strokeWidth: 0 } : false}
-              activeDot={{ r: 5, stroke: '#fff', strokeWidth: 2 }}
-              isAnimationActive={true}
-              animationDuration={600}
-            />
-          </ComposedChart>
-        </ResponsiveContainer>
+              <XAxis
+                dataKey="time"
+                type="number"
+                scale="time"
+                domain={zoomedDomain ?? ['dataMin', 'dataMax']}
+                ticks={activeTicks}
+                tickFormatter={(ms: number) => format(new Date(ms), activeFormatStr, { locale: ptBR })}
+                tick={{ fontSize: 11, fill: 'currentColor' }}
+                className="text-muted-foreground"
+              />
+
+              <YAxis
+                domain={[minVal, maxVal]}
+                tick={{ fontSize: 11, fill: 'currentColor' }}
+                className="text-muted-foreground"
+                width={unit === 'mmol' ? 44 : 40}
+                tickFormatter={(v: number) => formatGlucose(v, unit)}
+              />
+
+              <Tooltip
+                content={<CustomTooltip unit={unit} thresholds={alarmThresholds} />}
+                isAnimationActive={false}
+              />
+
+              {/* TIR zone reference lines */}
+              {refLines.map((r) => (
+                <ReferenceLine
+                  key={r.y}
+                  y={r.y}
+                  stroke={r.color}
+                  strokeDasharray={r.dash}
+                  strokeWidth={1.5}
+                  label={{
+                    value: `${formatGlucose(r.y, unit)}`,
+                    position: r.y >= 180 ? 'insideTopRight' : 'insideBottomRight',
+                    fontSize: 10,
+                    fill: r.color,
+                  }}
+                />
+              ))}
+
+              <Area
+                type="monotone"
+                dataKey="sgv"
+                stroke="url(#glStroke)"
+                strokeWidth={2}
+                fill="url(#glFill)"
+                dot={showDots ? { r: 2.5, strokeWidth: 0 } : false}
+                activeDot={{ r: 5, stroke: '#fff', strokeWidth: 2 }}
+                isAnimationActive={true}
+                animationDuration={600}
+              />
+
+              {/* Selection highlight during drag */}
+              {zoomLeft !== null && zoomRight !== null && (
+                <ReferenceArea
+                  x1={Math.min(zoomLeft, zoomRight)}
+                  x2={Math.max(zoomLeft, zoomRight)}
+                  fill={selectionFill}
+                  stroke={selectionStroke}
+                  strokeOpacity={0.5}
+                />
+              )}
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
       </CardContent>
     </Card>
   );
