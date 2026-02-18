@@ -2,7 +2,7 @@
 
 Interface moderna, responsiva e rica em recursos para monitoramento contínuo de glicose (CGM), construída sobre o banco de dados MongoDB do Nightscout existente.
 
-> **v0.5-beta** — Dashboard completo com IOB/COB em tempo real, Careportal, Calculadora de Bolus, marcadores de tratamento no gráfico, idades de dispositivos e previsão AR2.
+> **v0.4-beta** — Dashboard completo com IOB/COB em tempo real, Careportal, Calculadora de Bolus, marcadores de tratamento no gráfico, idades de dispositivos e previsão AR2.
 
 ---
 
