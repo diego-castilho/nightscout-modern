@@ -86,11 +86,17 @@ const ZONE = {
   veryLow:  '#dc2626',
 };
 
-// Converts a glucose value to a gradient offset (0% = top, 100% = bottom)
-function toOffset(val: number, minVal: number, maxVal: number): string {
-  const range = maxVal - minVal;
+// Converts a glucose value to a gradient offset (0% = top, 100% = bottom).
+//
+// The linearGradient uses gradientUnits="objectBoundingBox" (SVG default).
+// The bbox spans [bboxBottom, bboxTop] in glucose units:
+//   - Fill path:   bboxBottom = minVal  (baseline), bboxTop = rawMax
+//   - Stroke path: bboxBottom = rawMin  (lowest data point), bboxTop = rawMax
+// Formula: offset = (bboxTop − val) / (bboxTop − bboxBottom)
+function toOffset(val: number, bboxBottom: number, bboxTop: number): string {
+  const range = bboxTop - bboxBottom;
   if (range === 0) return '50%';
-  const pct = ((maxVal - val) / range) * 100;
+  const pct = ((bboxTop - val) / range) * 100;
   return `${Math.max(0, Math.min(100, pct)).toFixed(2)}%`;
 }
 
@@ -103,20 +109,22 @@ function zoneColor(val: number, t: AlarmThresholds): string {
   return ZONE.veryLow;
 }
 
-// Builds gradient stops with exact boundary positions for the stroke
-function buildStrokeStops(minVal: number, maxVal: number, t: AlarmThresholds) {
+// Builds gradient stops for a given bbox range [bboxBottom, bboxTop].
+// Fill:   buildGradientStops(minVal, rawMax, t)   — bbox includes the fill baseline
+// Stroke: buildGradientStops(rawMin, rawMax, t)   — bbox spans only the data curve
+function buildGradientStops(bboxBottom: number, bboxTop: number, t: AlarmThresholds) {
   const thresholds = [t.veryHigh, t.high, t.low, t.veryLow];
   const stops: { offset: string; color: string }[] = [];
 
-  stops.push({ offset: '0%', color: zoneColor(maxVal, t) });
+  stops.push({ offset: '0%', color: zoneColor(bboxTop, t) });
   for (const thresh of thresholds) {
-    if (thresh < maxVal && thresh > minVal) {
-      const off = toOffset(thresh, minVal, maxVal);
+    if (thresh < bboxTop && thresh > bboxBottom) {
+      const off = toOffset(thresh, bboxBottom, bboxTop);
       stops.push({ offset: off, color: zoneColor(thresh + 1, t) });
       stops.push({ offset: off, color: zoneColor(thresh - 1, t) });
     }
   }
-  stops.push({ offset: '100%', color: zoneColor(minVal, t) });
+  stops.push({ offset: '100%', color: zoneColor(bboxBottom, t) });
   return stops;
 }
 
@@ -481,7 +489,10 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
 
   const actualCount = displayData.filter((d) => d.sgv != null).length;
   const showDots = actualCount <= 20;
-  const strokeStops = buildStrokeStops(minVal, rawMax, alarmThresholds);
+  // Fill bbox: [minVal, rawMax]  — fill path includes baseline down to minVal
+  // Stroke bbox: [rawMin, rawMax] — stroke path only spans the actual data curve
+  const fillStops   = buildGradientStops(minVal,  rawMax, alarmThresholds);
+  const strokeStops = buildGradientStops(rawMin, rawMax, alarmThresholds);
 
   const refLines: { y: number; color: string; label: string; dash: string }[] = [
     { y: alarmThresholds.veryHigh, color: ZONE.veryHigh, label: String(alarmThresholds.veryHigh), dash: '3 4' },
@@ -558,7 +569,7 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
                   ))}
                 </linearGradient>
                 <linearGradient id="glFill" x1="0" y1="0" x2="0" y2="1">
-                  {strokeStops.map((s, i) => {
+                  {fillStops.map((s, i) => {
                     const frac = parseFloat(s.offset) / 100;
                     const op = Math.max(0.02, 0.20 - frac * 0.16);
                     return <stop key={i} offset={s.offset} stopColor={s.color} stopOpacity={op} />;
