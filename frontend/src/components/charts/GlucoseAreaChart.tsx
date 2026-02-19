@@ -30,9 +30,9 @@ import {
 } from 'recharts';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ZoomOut } from 'lucide-react';
+import { ZoomOut, X, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { getTreatments } from '../../lib/api';
+import { getTreatments, deleteTreatment } from '../../lib/api';
 import type { GlucoseEntry, Treatment } from '../../lib/api';
 import { useDashboardStore, getPeriodDates, type Period, type AlarmThresholds } from '../../stores/dashboardStore';
 import { getTrendArrow, timeAgo } from '../../lib/utils';
@@ -246,11 +246,11 @@ function TreatmentTooltipContent({ treatment, unit }: { treatment: Treatment; un
 interface TreatmentLabelProps {
   viewBox?: { x: number; y: number; width: number; height: number };
   treatment: Treatment;
-  onEnter: (treatment: Treatment, cx: number, cy: number) => void;
-  onLeave: () => void;
+  isActive: boolean;
+  onClick: (treatment: Treatment, cx: number, cy: number) => void;
 }
 
-function TreatmentLabel({ viewBox, treatment, onEnter, onLeave }: TreatmentLabelProps) {
+function TreatmentLabel({ viewBox, treatment, isActive, onClick }: TreatmentLabelProps) {
   if (!viewBox) return null;
   const cfg = TREATMENT_VISUAL[treatment.eventType];
   if (!cfg) return null;
@@ -259,12 +259,12 @@ function TreatmentLabel({ viewBox, treatment, onEnter, onLeave }: TreatmentLabel
 
   return (
     <g
-      onMouseEnter={() => onEnter(treatment, cx, cy)}
-      onMouseLeave={onLeave}
+      onClick={(e) => { e.stopPropagation(); onClick(treatment, cx, cy); }}
       style={{ cursor: 'pointer' }}
     >
       <circle cx={cx} cy={cy} r={9}   fill="white"    opacity={0.75} />
-      <circle cx={cx} cy={cy} r={7.5} fill={cfg.color} opacity={0.92} />
+      <circle cx={cx} cy={cy} r={7.5} fill={cfg.color} opacity={isActive ? 1 : 0.92} />
+      <circle cx={cx} cy={cy} r={9}   fill="none" stroke={cfg.color} strokeWidth={isActive ? 1.5 : 0} opacity={0.6} />
       <text
         x={cx} y={cy + 3.5}
         textAnchor="middle"
@@ -344,6 +344,20 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
     cx: number;
     cy: number;
   } | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function handleDeleteTreatment(id: string) {
+    setDeletingId(id);
+    try {
+      await deleteTreatment(id);
+      setTreatments((prev) => prev.filter((t) => t._id !== id));
+      setTreatmentTooltip(null);
+    } catch {
+      // silently ignore — user can retry from /treatments page
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   // Show markers only for periods ≤ 24h (for longer periods the chart scale
   // makes markers too dense and visually unreadable)
@@ -508,7 +522,10 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
 
       <CardContent className="pt-0">
         {/* Wrapper with position:relative for the treatment tooltip overlay */}
-        <div style={{ position: 'relative', cursor: zoomLeft !== null ? 'ew-resize' : 'crosshair' }}>
+        <div
+          style={{ position: 'relative', cursor: zoomLeft !== null ? 'ew-resize' : 'crosshair' }}
+          onClick={() => setTreatmentTooltip(null)}
+        >
           <ResponsiveContainer width="100%" height={280}>
             <ComposedChart
               data={displayData}
@@ -639,8 +656,12 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   label={(<TreatmentLabel
                     treatment={t}
-                    onEnter={(tr, cx, cy) => setTreatmentTooltip({ treatment: tr, cx, cy })}
-                    onLeave={() => setTreatmentTooltip(null)}
+                    isActive={treatmentTooltip?.treatment._id === t._id}
+                    onClick={(tr, cx, cy) =>
+                      setTreatmentTooltip((prev) =>
+                        prev?.treatment._id === tr._id ? null : { treatment: tr, cx, cy }
+                      )
+                    }
                   />) as any}
                 />
               ))}
@@ -667,11 +688,29 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
                 left:      Math.max(4, treatmentTooltip.cx - 75),
                 top:       treatmentTooltip.cy + 15,
                 zIndex:    50,
-                pointerEvents: 'none',
               }}
               className="bg-background border border-border rounded-lg shadow-xl p-2.5 text-xs min-w-[150px] max-w-[200px]"
+              onClick={(e) => e.stopPropagation()}
             >
-              <TreatmentTooltipContent treatment={treatmentTooltip.treatment} unit={unit} />
+              {/* Header com botão fechar */}
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <TreatmentTooltipContent treatment={treatmentTooltip.treatment} unit={unit} />
+                <button
+                  onClick={() => setTreatmentTooltip(null)}
+                  className="shrink-0 text-muted-foreground hover:text-foreground mt-0.5"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+              {/* Botão deletar */}
+              <button
+                onClick={() => handleDeleteTreatment(treatmentTooltip.treatment._id)}
+                disabled={deletingId === treatmentTooltip.treatment._id}
+                className="mt-2 w-full flex items-center justify-center gap-1 rounded border border-destructive/40 text-destructive hover:bg-destructive/10 transition-colors py-1 text-[10px] font-medium disabled:opacity-50"
+              >
+                <Trash2 className="h-2.5 w-2.5" />
+                {deletingId === treatmentTooltip.treatment._id ? 'Removendo…' : 'Remover'}
+              </button>
             </div>
           )}
         </div>

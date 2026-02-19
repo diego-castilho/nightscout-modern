@@ -28,6 +28,8 @@ const REQUIRED_FIELDS: Record<string, string[]> = {
   'Temp Basal':        ['rate', 'duration'],
   // Lifestyle
   'Exercise':          ['duration'],
+  // MDI — basal diária via caneta
+  'Basal Insulin':     ['insulin'],
 };
 
 const VALID_EVENT_TYPES = Object.keys(REQUIRED_FIELDS);
