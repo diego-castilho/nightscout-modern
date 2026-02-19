@@ -52,7 +52,7 @@ interface FieldConfig {
   intensity?: boolean;          // Exercise intensity selector
   immediateInsulin?: boolean;   // Combo Bolus immediate component
   extendedInsulin?: boolean;    // Combo Bolus extended component
-  absorptionTime?: boolean;     // Carb absorption time in minutes
+  preBolus?: boolean;           // Carb time offset (when carbs were/will be eaten)
   // required subsets
   insulinRequired?: boolean;
   carbsRequired?: boolean;
@@ -65,11 +65,11 @@ interface FieldConfig {
 }
 
 const FIELD_CONFIG: Record<EventTypeValue, FieldConfig> = {
-  'Meal Bolus':       { insulin: true, insulinRequired: true, carbs: true, carbsRequired: true, protein: true, fat: true, absorptionTime: true, glucose: true, notes: true },
-  'Snack Bolus':      { insulin: true, insulinRequired: true, carbs: true, carbsRequired: true, protein: true, fat: true, absorptionTime: true, glucose: true, notes: true },
+  'Meal Bolus':       { insulin: true, insulinRequired: true, carbs: true, carbsRequired: true, protein: true, fat: true, preBolus: true, glucose: true, notes: true },
+  'Snack Bolus':      { insulin: true, insulinRequired: true, carbs: true, carbsRequired: true, protein: true, fat: true, preBolus: true, glucose: true, notes: true },
   'Correction Bolus': { insulin: true, insulinRequired: true, glucose: true, notes: true },
-  'Combo Bolus':      { immediateInsulin: true, immediateInsulinRequired: true, extendedInsulin: true, extendedInsulinRequired: true, duration: true, durationRequired: true, carbs: true, protein: true, fat: true, absorptionTime: true, glucose: true, notes: true },
-  'Carb Correction':  { carbs: true, carbsRequired: true, protein: true, fat: true, absorptionTime: true, glucose: true, notes: true },
+  'Combo Bolus':      { immediateInsulin: true, immediateInsulinRequired: true, extendedInsulin: true, extendedInsulinRequired: true, duration: true, durationRequired: true, carbs: true, protein: true, fat: true, preBolus: true, glucose: true, notes: true },
+  'Carb Correction':  { carbs: true, carbsRequired: true, protein: true, fat: true, glucose: true, notes: true },
   'BG Check':         { glucose: true, glucoseRequired: true, notes: true },
   'Note':             { notes: true, notesRequired: true },
   'Temp Basal':       { rate: true, rateRequired: true, duration: true, durationRequired: true, rateMode: true, notes: true },
@@ -124,7 +124,7 @@ export function TreatmentModal({ onClose, onSuccess, initialValues }: Props) {
   const [duration, setDuration]               = useState('');
   const [immediateInsulin, setImmediateInsulin] = useState('');
   const [extendedInsulin,  setExtendedInsulin]  = useState('');
-  const [absorptionTime,   setAbsorptionTime]   = useState('');
+  const [preBolus,         setPreBolus]          = useState('0');
   const [rateMode, setRateMode]   = useState<'absolute' | 'relative'>('absolute');
   const [penStep, setPenStep]         = useState<0.5 | 1>(1);
   const [exerciseType, setExerciseType] = useState('aeróbico');
@@ -153,7 +153,7 @@ export function TreatmentModal({ onClose, onSuccess, initialValues }: Props) {
     setInsulin(''); setCarbs(''); setGlucose('');
     setProtein(''); setFat(''); setNotes('');
     setRate(''); setDuration('');
-    setImmediateInsulin(''); setExtendedInsulin(''); setAbsorptionTime('');
+    setImmediateInsulin(''); setExtendedInsulin(''); setPreBolus('0');
     setRateMode('absolute');
     setPenStep(1);
     setExerciseType('aeróbico');
@@ -203,7 +203,7 @@ export function TreatmentModal({ onClose, onSuccess, initialValues }: Props) {
       if (duration)         payload.duration         = parseFloat(duration);
       if (immediateInsulin) payload.immediateInsulin = parseFloat(immediateInsulin);
       if (extendedInsulin)  payload.extendedInsulin  = parseFloat(extendedInsulin);
-      if (absorptionTime)   payload.absorptionTime   = parseFloat(absorptionTime);
+      if (cfg.preBolus)     payload.preBolus         = parseInt(preBolus);
       if (cfg.rateMode)     payload.rateMode     = rateMode;
       if (cfg.exerciseType) payload.exerciseType = exerciseType;
       if (cfg.intensity)    payload.intensity    = intensity;
@@ -492,23 +492,28 @@ export function TreatmentModal({ onClose, onSuccess, initialValues }: Props) {
             </div>
           )}
 
-          {/* Absorção dos carboidratos */}
-          {cfg.absorptionTime && (
+          {/* Carb Time (preBolus) */}
+          {cfg.preBolus && (
             <div className="space-y-1.5">
-              <Label htmlFor="absorptionTime">Absorção dos carbos</Label>
-              <div className="relative">
-                <Input
-                  id="absorptionTime"
-                  type="number"
-                  min="0"
-                  step="15"
-                  placeholder="120"
-                  value={absorptionTime}
-                  onChange={(e) => setAbsorptionTime(e.target.value)}
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">min</span>
-              </div>
-              <p className="text-xs text-muted-foreground">Tempo estimado de absorção (padrão 120 min)</p>
+              <Label htmlFor="preBolus">Momento dos carbos</Label>
+              <select
+                id="preBolus"
+                value={preBolus}
+                onChange={(e) => setPreBolus(e.target.value)}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="-60">60 min antes (já comi)</option>
+                <option value="-45">45 min antes</option>
+                <option value="-30">30 min antes</option>
+                <option value="-20">20 min antes</option>
+                <option value="-15">15 min antes</option>
+                <option value="0">Agora</option>
+                <option value="15">15 min depois</option>
+                <option value="20">20 min depois</option>
+                <option value="30">30 min depois (vou comer)</option>
+                <option value="45">45 min depois</option>
+                <option value="60">60 min depois</option>
+              </select>
             </div>
           )}
 

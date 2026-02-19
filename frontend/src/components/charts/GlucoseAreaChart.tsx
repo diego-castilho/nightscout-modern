@@ -241,7 +241,11 @@ function TreatmentTooltipContent({ treatment, unit }: { treatment: Treatment; un
         {treatment.carbs          != null && <p>Carbos: <span className="font-medium">{treatment.carbs}g</span></p>}
         {treatment.protein        != null && <p>Proteína: <span className="font-medium">{treatment.protein}g</span></p>}
         {treatment.fat            != null && <p>Gordura: <span className="font-medium">{treatment.fat}g</span></p>}
-        {treatment.absorptionTime != null && <p>Absorção: <span className="font-medium">{treatment.absorptionTime} min</span></p>}
+        {treatment.preBolus != null && treatment.preBolus !== 0 && (
+          <p>Carbos: <span className="font-medium">
+            {treatment.preBolus < 0 ? `${Math.abs(treatment.preBolus)} min antes` : `${treatment.preBolus} min depois`}
+          </span></p>
+        )}
         {treatment.glucose        != null && <p>Glicose: <span className="font-medium">{formatGlucose(treatment.glucose, unit)} {ul}</span></p>}
         {treatment.notes              && <p className="text-muted-foreground italic mt-0.5">"{treatment.notes}"</p>}
       </div>

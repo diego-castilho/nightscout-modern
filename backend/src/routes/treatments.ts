@@ -73,7 +73,7 @@ router.post('/', async (req, res) => {
     const { eventType, created_at, timestamp, glucose, carbs, insulin,
             protein, fat, notes, units, glucoseType, enteredBy, duration,
             rate, rateMode, exerciseType, intensity,
-            immediateInsulin, extendedInsulin, absorptionTime } = req.body;
+            immediateInsulin, extendedInsulin, preBolus } = req.body;
 
     // Validar tipo de evento
     if (!eventType || !VALID_EVENT_TYPES.includes(eventType)) {
@@ -118,7 +118,7 @@ router.post('/', async (req, res) => {
     if (intensity        != null) doc.intensity        = String(intensity);
     if (immediateInsulin != null) doc.immediateInsulin = Number(immediateInsulin);
     if (extendedInsulin  != null) doc.extendedInsulin  = Number(extendedInsulin);
-    if (absorptionTime   != null) doc.absorptionTime   = Number(absorptionTime);
+    if (preBolus         != null) doc.preBolus         = Number(preBolus);
     // Combo Bolus: set insulin = total for display/reporting
     if (eventType === 'Combo Bolus' && immediateInsulin != null && extendedInsulin != null) {
       doc.insulin = Number(immediateInsulin) + Number(extendedInsulin);

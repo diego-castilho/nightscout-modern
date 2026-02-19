@@ -259,7 +259,7 @@ export interface Treatment {
   intensity?:        string;                   // Exercise intensity (leve, moderada, intensa)
   immediateInsulin?: number;                   // Combo Bolus: immediate component in U
   extendedInsulin?:  number;                   // Combo Bolus: extended component in U
-  absorptionTime?:   number;                   // Carb absorption time in minutes (for COB)
+  preBolus?:         number;                   // Carb time offset in minutes (negative = eaten before, positive = will eat after)
 }
 
 export async function getTreatments(params?: {
