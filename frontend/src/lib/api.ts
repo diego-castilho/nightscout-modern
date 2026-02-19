@@ -221,6 +221,7 @@ export interface AppSettings {
   icr?:          number;    // Insulin-to-Carb Ratio g per U
   targetBG?:     number;    // Target blood glucose mg/dL
   rapidPenStep?: 0.5 | 1;  // Rapid pen dosing increment in U
+  colorTheme?:   string;    // UI color theme: 'default' | 'dracula'
 }
 
 export async function getSettings(): Promise<AppSettings | null> {

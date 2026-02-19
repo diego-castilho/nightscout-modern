@@ -10,6 +10,7 @@ import { DEFAULT_DEVICE_AGE_THRESHOLDS } from '../lib/deviceAge';
 import type { DeviceAgeThresholds } from '../lib/deviceAge';
 
 export type Period = '1h' | '3h' | '6h' | '12h' | '24h' | '7d' | '14d' | '30d';
+export type ColorTheme = 'default' | 'dracula';
 
 export interface AlarmThresholds {
   veryLow:  number;  // mg/dL, default 54
@@ -25,6 +26,7 @@ const DEFAULT_THRESHOLDS: AlarmThresholds = {
 interface DashboardState {
   period: Period;
   darkMode: boolean;
+  colorTheme: ColorTheme;
   lastRefresh: number;
   alarmThresholds: AlarmThresholds;
   // Phase 4: user settings
@@ -41,6 +43,8 @@ interface DashboardState {
   rapidPenStep: 0.5 | 1;  // Rapid pen dosing increment in U (default 1)
   setPeriod: (period: Period) => void;
   toggleDarkMode: () => void;
+  setDarkMode: (dark: boolean) => void;
+  setColorTheme: (theme: ColorTheme) => void;
   triggerRefresh: () => void;
   setAlarmThresholds: (t: AlarmThresholds) => void;
   setUnit: (unit: GlucoseUnit) => void;
@@ -57,11 +61,18 @@ interface DashboardState {
   initFromServer: (settings: AppSettings) => void;
 }
 
+function applyThemeClasses(darkMode: boolean, colorTheme: ColorTheme) {
+  const html = document.documentElement;
+  darkMode          ? html.classList.add('dark')    : html.classList.remove('dark');
+  colorTheme === 'dracula' ? html.classList.add('dracula') : html.classList.remove('dracula');
+}
+
 export const useDashboardStore = create<DashboardState>()(
   persist(
     (set) => ({
       period: '24h',
       darkMode: false,
+      colorTheme: 'default',
       lastRefresh: Date.now(),
       alarmThresholds: DEFAULT_THRESHOLDS,
       unit: 'mgdl',
@@ -81,12 +92,20 @@ export const useDashboardStore = create<DashboardState>()(
       toggleDarkMode: () =>
         set((state) => {
           const next = !state.darkMode;
-          if (next) {
-            document.documentElement.classList.add('dark');
-          } else {
-            document.documentElement.classList.remove('dark');
-          }
+          applyThemeClasses(next, state.colorTheme);
           return { darkMode: next };
+        }),
+
+      setDarkMode: (dark) =>
+        set((state) => {
+          applyThemeClasses(dark, state.colorTheme);
+          return { darkMode: dark };
+        }),
+
+      setColorTheme: (colorTheme) =>
+        set((state) => {
+          applyThemeClasses(state.darkMode, colorTheme);
+          return { colorTheme };
         }),
 
       triggerRefresh: () => set({ lastRefresh: Date.now() }),
@@ -119,8 +138,6 @@ export const useDashboardStore = create<DashboardState>()(
         alarmThresholds: settings.alarmThresholds ?? state.alarmThresholds,
         dia:                    settings.dia                    ?? state.dia,
         carbAbsorptionRate:     settings.carbAbsorptionRate     ?? state.carbAbsorptionRate,
-        // Spread defaults + current state + server values so new fields are
-        // always present even when loading an older server-side config.
         deviceAgeThresholds: settings.deviceAgeThresholds
           ? { ...DEFAULT_DEVICE_AGE_THRESHOLDS, ...state.deviceAgeThresholds, ...settings.deviceAgeThresholds }
           : state.deviceAgeThresholds,
@@ -129,12 +146,14 @@ export const useDashboardStore = create<DashboardState>()(
         icr:          settings.icr          ?? state.icr,
         targetBG:     settings.targetBG     ?? state.targetBG,
         rapidPenStep: settings.rapidPenStep ?? state.rapidPenStep,
+        colorTheme:   (settings.colorTheme as ColorTheme) ?? state.colorTheme,
       })),
     }),
     {
       name: 'nightscout-dashboard',
       partialize: (state: DashboardState) => ({
         darkMode:        state.darkMode,
+        colorTheme:      state.colorTheme,
         period:          state.period,
         alarmThresholds: state.alarmThresholds,
         unit:            state.unit,
@@ -153,14 +172,15 @@ export const useDashboardStore = create<DashboardState>()(
   )
 );
 
-// Apply dark mode class on startup from persisted state
+// Apply theme classes on startup from persisted state
 const stored = localStorage.getItem('nightscout-dashboard');
 if (stored) {
   try {
     const parsed = JSON.parse(stored);
-    if (parsed?.state?.darkMode) {
-      document.documentElement.classList.add('dark');
-    }
+    applyThemeClasses(
+      !!parsed?.state?.darkMode,
+      parsed?.state?.colorTheme ?? 'default'
+    );
   } catch {
     // ignore parse errors
   }

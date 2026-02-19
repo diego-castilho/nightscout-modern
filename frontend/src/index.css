@@ -1,8 +1,11 @@
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  /* ── Default Light ─────────────────────────────────────────────────────── */
   :root {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
@@ -26,6 +29,7 @@
     --radius: 0.5rem;
   }
 
+  /* ── Default Dark ──────────────────────────────────────────────────────── */
   .dark {
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
@@ -47,6 +51,61 @@
     --input: 217.2 32.6% 17.5%;
     --ring: 199 89% 48%;
   }
+
+  /* ── Dracula Light / Alucard ───────────────────────────────────────────── */
+  .dracula {
+    --background: 44 100% 96%;           /* #FFFBEB — creme Alucard   */
+    --foreground: 231 15% 12%;           /* #19191F — quase-preto     */
+    --card: 44 80% 93%;                  /* #FEF3C7 — creme suave     */
+    --card-foreground: 231 15% 12%;
+    --popover: 44 100% 97%;
+    --popover-foreground: 231 15% 12%;
+    --primary: 265 89% 65%;              /* #9D6FEF — púrpura Dracula  */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 265 50% 92%;            /* lavanda suave              */
+    --secondary-foreground: 265 40% 22%;
+    --muted: 44 40% 90%;                 /* creme escuro               */
+    --muted-foreground: 231 10% 42%;
+    --accent: 170 60% 88%;               /* ciano tênue                */
+    --accent-foreground: 170 60% 18%;
+    --destructive: 10 90% 58%;           /* vermelho Dracula suave     */
+    --destructive-foreground: 0 0% 100%;
+    --border: 265 25% 84%;               /* borda lavanda              */
+    --input: 265 25% 84%;
+    --ring: 265 89% 65%;
+  }
+
+  /* ── Dracula Dark / Classic ────────────────────────────────────────────── */
+  .dracula.dark {
+    --background: 231 15% 18%;           /* #282A36 — fundo Dracula   */
+    --foreground: 60 30% 96%;            /* #F8F8F2 — foreground      */
+    --card: 232 14% 14%;                 /* #21222C — card mais escuro*/
+    --card-foreground: 60 30% 96%;
+    --popover: 232 14% 14%;
+    --popover-foreground: 60 30% 96%;
+    --primary: 265 89% 78%;              /* #BD93F9 — púrpura         */
+    --primary-foreground: 231 15% 18%;
+    --secondary: 232 14% 31%;            /* #44475A — seleção         */
+    --secondary-foreground: 60 30% 96%;
+    --muted: 232 14% 31%;                /* #44475A                   */
+    --muted-foreground: 225 27% 51%;     /* #6272A4 — comentário      */
+    --accent: 232 14% 31%;
+    --accent-foreground: 170 100% 75%;   /* #80FFEA — ciano           */
+    --destructive: 0 100% 67%;           /* #FF5555 — vermelho        */
+    --destructive-foreground: 60 30% 96%;
+    --border: 232 14% 31%;               /* #44475A                   */
+    --input: 232 14% 31%;
+    --ring: 265 89% 78%;
+  }
+}
+
+/* ── Dracula: Fira Code font ─────────────────────────────────────────────── */
+.dracula,
+.dracula input,
+.dracula select,
+.dracula textarea,
+.dracula button {
+  font-family: 'Fira Code', monospace;
 }
 
 @layer base {
@@ -60,35 +119,15 @@
 }
 
 @layer utilities {
-  .glucose-color-very-low {
-    @apply text-red-600 dark:text-red-500;
-  }
-  .glucose-color-low {
-    @apply text-amber-600 dark:text-amber-500;
-  }
-  .glucose-color-normal {
-    @apply text-green-600 dark:text-green-500;
-  }
-  .glucose-color-high {
-    @apply text-amber-600 dark:text-amber-500;
-  }
-  .glucose-color-very-high {
-    @apply text-red-600 dark:text-red-500;
-  }
+  .glucose-color-very-low  { @apply text-red-600 dark:text-red-500; }
+  .glucose-color-low       { @apply text-amber-600 dark:text-amber-500; }
+  .glucose-color-normal    { @apply text-green-600 dark:text-green-500; }
+  .glucose-color-high      { @apply text-amber-600 dark:text-amber-500; }
+  .glucose-color-very-high { @apply text-red-600 dark:text-red-500; }
 
-  .glucose-bg-very-low {
-    @apply bg-red-100 dark:bg-red-950;
-  }
-  .glucose-bg-low {
-    @apply bg-amber-100 dark:bg-amber-950;
-  }
-  .glucose-bg-normal {
-    @apply bg-green-100 dark:bg-green-950;
-  }
-  .glucose-bg-high {
-    @apply bg-amber-100 dark:bg-amber-950;
-  }
-  .glucose-bg-very-high {
-    @apply bg-red-100 dark:bg-red-950;
-  }
+  .glucose-bg-very-low     { @apply bg-red-100 dark:bg-red-950; }
+  .glucose-bg-low          { @apply bg-amber-100 dark:bg-amber-950; }
+  .glucose-bg-normal       { @apply bg-green-100 dark:bg-green-950; }
+  .glucose-bg-high         { @apply bg-amber-100 dark:bg-amber-950; }
+  .glucose-bg-very-high    { @apply bg-red-100 dark:bg-red-950; }
 }
