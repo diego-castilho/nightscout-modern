@@ -156,10 +156,11 @@ export function CurrentGlucoseCard({ latest, previous, loading }: Props) {
   const config = LEVEL_CONFIG[level];
   const trendArrow = getTrendArrow(latest.trend);
   const trendDesc = getTrendDescription(latest.trend);
-  // Prefer delta computed from the two most recent readings; fall back to Nightscout's stored delta
-  const rawDeltaMgdl = previous
-    ? latest.sgv - previous.sgv
-    : latest.delta;
+  // Prefer delta stored by Nightscout (same value shown in the NS UI).
+  // Fall back to manual diff only when the field is absent.
+  const rawDeltaMgdl = latest.delta !== undefined
+    ? latest.delta
+    : (previous ? latest.sgv - previous.sgv : undefined);
   const deltaText = rawDeltaMgdl !== undefined
     ? (() => {
         const d = unit === 'mmol' ? rawDeltaMgdl / 18.01 : rawDeltaMgdl;

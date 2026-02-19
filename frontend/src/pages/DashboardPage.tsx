@@ -145,7 +145,7 @@ export function DashboardPage() {
         {/* Current glucose - prominent */}
         <CurrentGlucoseCard
           latest={latest}
-          previous={entries.length >= 2 ? entries[entries.length - 2] : undefined}
+          previous={latest ? [...entries].reverse().find(e => e.date < latest.date) : undefined}
           loading={loading}
         />
 
