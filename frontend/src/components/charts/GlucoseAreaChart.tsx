@@ -30,7 +30,12 @@ import {
 } from 'recharts';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ZoomOut, X, Trash2 } from 'lucide-react';
+import {
+  ZoomOut, X, Trash2,
+  Utensils, Syringe, Cookie, Droplets, FileText, Activity,
+  MapPin, FlaskConical, PenLine, Zap, Timer, Dumbbell, Moon,
+  type LucideIcon,
+} from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { getTreatments, deleteTreatment } from '../../lib/api';
 import type { GlucoseEntry, Treatment } from '../../lib/api';
@@ -54,20 +59,20 @@ interface ChartPoint {
 
 // ── Treatment visual config ─────────────────────────────────────────────────
 
-const TREATMENT_VISUAL: Record<string, { color: string; label: string; char: string }> = {
-  'Meal Bolus':       { color: '#3b82f6', label: 'Refeição + Bolus',   char: 'R' },
-  'Correction Bolus': { color: '#8b5cf6', label: 'Bolus de Correção',  char: 'B' },
-  'Carb Correction':  { color: '#f97316', label: 'Correção de Carbos', char: 'C' },
-  'BG Check':         { color: '#14b8a6', label: 'Leitura de Glicose', char: 'G' },
-  'Note':             { color: '#64748b', label: 'Anotação',            char: 'N' },
-  'Sensor Change':    { color: '#06b6d4', label: 'Troca de Sensor',     char: 'M' },
-  'Site Change':      { color: '#22c55e', label: 'Troca de Site',       char: 'S' },
-  'Insulin Change':   { color: '#f59e0b', label: 'Troca de Insulina',   char: 'I' },
-  'Basal Pen Change': { color: '#818cf8', label: 'Caneta Basal',        char: 'L' },
-  'Rapid Pen Change': { color: '#fb7185', label: 'Caneta Rápida',       char: 'F' },
-  'Temp Basal':       { color: '#8b5cf6', label: 'Basal Temporária',    char: 'T' },
-  'Exercise':         { color: '#10b981', label: 'Exercício',           char: 'E' },
-  'Basal Insulin':    { color: '#6366f1', label: 'Insulina Basal',      char: 'X' },
+const TREATMENT_VISUAL: Record<string, { color: string; label: string; icon: LucideIcon }> = {
+  'Meal Bolus':       { color: '#3b82f6', label: 'Refeição + Bolus',   icon: Utensils     },
+  'Correction Bolus': { color: '#8b5cf6', label: 'Bolus de Correção',  icon: Syringe      },
+  'Carb Correction':  { color: '#f97316', label: 'Correção de Carbos', icon: Cookie       },
+  'BG Check':         { color: '#14b8a6', label: 'Leitura de Glicose', icon: Droplets     },
+  'Note':             { color: '#64748b', label: 'Anotação',            icon: FileText     },
+  'Sensor Change':    { color: '#06b6d4', label: 'Troca de Sensor',     icon: Activity     },
+  'Site Change':      { color: '#22c55e', label: 'Troca de Site',       icon: MapPin       },
+  'Insulin Change':   { color: '#f59e0b', label: 'Troca de Insulina',   icon: FlaskConical },
+  'Basal Pen Change': { color: '#818cf8', label: 'Caneta Basal',        icon: PenLine      },
+  'Rapid Pen Change': { color: '#fb7185', label: 'Caneta Rápida',       icon: Zap          },
+  'Temp Basal':       { color: '#8b5cf6', label: 'Basal Temporária',    icon: Timer        },
+  'Exercise':         { color: '#10b981', label: 'Exercício',           icon: Dumbbell     },
+  'Basal Insulin':    { color: '#6366f1', label: 'Insulina Basal',      icon: Moon         },
 };
 
 // TIR zone colors (matching TIRChart)
@@ -256,25 +261,26 @@ function TreatmentLabel({ viewBox, treatment, isActive, onClick }: TreatmentLabe
   if (!cfg) return null;
   const cx = viewBox.x;
   const cy = viewBox.y + viewBox.height - 12; // 12px above bottom of plot area
+  const Icon = cfg.icon;
+  const r = 9;
 
   return (
     <g
       onClick={(e) => { e.stopPropagation(); onClick(treatment, cx, cy); }}
       style={{ cursor: 'pointer' }}
     >
-      <circle cx={cx} cy={cy} r={9}   fill="white"    opacity={0.75} />
-      <circle cx={cx} cy={cy} r={7.5} fill={cfg.color} opacity={isActive ? 1 : 0.92} />
-      <circle cx={cx} cy={cy} r={9}   fill="none" stroke={cfg.color} strokeWidth={isActive ? 1.5 : 0} opacity={0.6} />
-      <text
-        x={cx} y={cy + 3.5}
-        textAnchor="middle"
-        fill="white"
-        fontSize={8.5}
-        fontWeight="bold"
-        style={{ pointerEvents: 'none', userSelect: 'none' }}
-      >
-        {cfg.char}
-      </text>
+      <circle cx={cx} cy={cy} r={r}     fill="white"     opacity={0.75} />
+      <circle cx={cx} cy={cy} r={r - 1.5} fill={cfg.color} opacity={isActive ? 1 : 0.92} />
+      {isActive && <circle cx={cx} cy={cy} r={r} fill="none" stroke={cfg.color} strokeWidth={1.5} opacity={0.6} />}
+      <foreignObject x={cx - r + 2} y={cy - r + 2} width={(r - 2) * 2} height={(r - 2) * 2} style={{ pointerEvents: 'none' }}>
+        <div
+          // @ts-expect-error — xmlns required for SVG foreignObject
+          xmlns="http://www.w3.org/1999/xhtml"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}
+        >
+          <Icon size={9} color="white" strokeWidth={2.5} />
+        </div>
+      </foreignObject>
     </g>
   );
 }
@@ -721,13 +727,13 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
             <div className="flex flex-wrap gap-x-4 gap-y-1.5">
               {visibleTreatments.length > 0 && Object.entries(TREATMENT_VISUAL)
                 .filter(([type]) => visibleEventTypes.includes(type))
-                .map(([type, { color, char, label }]) => (
+                .map(([type, { color, label, icon: Icon }]) => (
                   <div key={type} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
                     <span
-                      className="inline-flex items-center justify-center rounded-full text-white font-bold shrink-0"
-                      style={{ backgroundColor: color, width: 15, height: 15, fontSize: 8 }}
+                      className="inline-flex items-center justify-center rounded-full shrink-0"
+                      style={{ backgroundColor: color, width: 15, height: 15 }}
                     >
-                      {char}
+                      <Icon size={8} color="white" strokeWidth={2.5} />
                     </span>
                     {label}
                   </div>
