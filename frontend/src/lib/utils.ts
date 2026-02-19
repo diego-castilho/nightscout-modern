@@ -34,52 +34,63 @@ export function formatGlucose(sgv: number, units: 'mg/dl' | 'mmol/l' = 'mg/dl'):
   return sgv.toString();
 }
 
-// Get trend arrow symbol
-export function getTrendArrow(trend: number | undefined): string {
-  if (trend === undefined) return '→';
+// Get trend arrow symbol — mirrors Nightscout direction.js dir2Char mapping
+export function getTrendArrow(direction: string | undefined): string {
+  if (!direction) return '-';
 
-  const arrows: { [key: number]: string } = {
-    '-2': '⇊', // DoubleDown
-    '-1': '↓', // SingleDown
-    '0': '→',  // Flat
-    '1': '↑',  // SingleUp
-    '2': '⇈',  // DoubleUp
+  const dir2Char: Record<string, string> = {
+    'NONE':              '⇼',
+    'TripleUp':          '⤊',
+    'DoubleUp':          '⇈',
+    'SingleUp':          '↑',
+    'FortyFiveUp':       '↗',
+    'Flat':              '→',
+    'FortyFiveDown':     '↘',
+    'SingleDown':        '↓',
+    'DoubleDown':        '⇊',
+    'TripleDown':        '⤋',
+    'NOT COMPUTABLE':    '-',
+    'RATE OUT OF RANGE': '⇕',
   };
 
-  return arrows[trend] || '→';
+  return dir2Char[direction] ?? '-';
 }
 
-// Get trend description
-export function getTrendDescription(trend: number | undefined): string {
-  if (trend === undefined) return 'Stable';
+// Get trend description in Portuguese
+export function getTrendDescription(direction: string | undefined): string {
+  if (!direction) return 'Indisponível';
 
-  const descriptions: { [key: number]: string } = {
-    '-2': 'Dropping rapidly',
-    '-1': 'Dropping',
-    '0': 'Stable',
-    '1': 'Rising',
-    '2': 'Rising rapidly',
+  const descriptions: Record<string, string> = {
+    'NONE':              'Não calculável',
+    'TripleUp':          'Subindo muito rápido',
+    'DoubleUp':          'Subindo rapidamente',
+    'SingleUp':          'Subindo',
+    'FortyFiveUp':       'Subindo levemente',
+    'Flat':              'Estável',
+    'FortyFiveDown':     'Descendo levemente',
+    'SingleDown':        'Descendo',
+    'DoubleDown':        'Descendo rapidamente',
+    'TripleDown':        'Descendo muito rápido',
+    'NOT COMPUTABLE':    'Não calculável',
+    'RATE OUT OF RANGE': 'Fora do intervalo',
   };
 
-  return descriptions[trend] || 'Stable';
+  return descriptions[direction] ?? 'Indisponível';
 }
 
-// Calculate time ago
+// Calculate time ago (em português)
 export function timeAgo(date: number | Date): string {
   const now = Date.now();
   const timestamp = typeof date === 'number' ? date : date.getTime();
   const diffMs = now - timestamp;
-  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffMins = Math.floor(diffMs / 60_000);
 
-  if (diffMins < 1) return 'just now';
-  if (diffMins === 1) return '1 min ago';
-  if (diffMins < 60) return `${diffMins} mins ago`;
+  if (diffMins < 1)  return 'agora';
+  if (diffMins < 60) return `há ${diffMins} min`;
 
   const diffHours = Math.floor(diffMins / 60);
-  if (diffHours === 1) return '1 hour ago';
-  if (diffHours < 24) return `${diffHours} hours ago`;
+  if (diffHours < 24) return `há ${diffHours}h`;
 
   const diffDays = Math.floor(diffHours / 24);
-  if (diffDays === 1) return '1 day ago';
-  return `${diffDays} days ago`;
+  return `há ${diffDays}d`;
 }

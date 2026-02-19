@@ -2,7 +2,7 @@
 
 Interface moderna, responsiva e rica em recursos para monitoramento contínuo de glicose (CGM), construída sobre o banco de dados MongoDB do Nightscout existente.
 
-> **v0.4-beta** — Dashboard completo com IOB/COB em tempo real, Careportal, Calculadora de Bolus, marcadores de tratamento no gráfico, idades de dispositivos e previsão AR2.
+> **v0.5-beta** — Calculadora de Bolus aprimorada (inspirada no NS BWP), previsão AR2 com algoritmo idêntico ao Nightscout, delta com bucket averaging para leituras de 1 min (Libre), setas de tendência por string de direção e temas de cor (Dracula, Padrão, etc.).
 
 ---
 
@@ -46,12 +46,12 @@ Interface moderna, responsiva e rica em recursos para monitoramento contínuo de
 | Gráfico | Descrição |
 |---------|-----------|
 | **Leituras de Glicose** | AreaChart com gradiente dinâmico por zona TIR. Zoom via drag horizontal, double-click para resetar. Eixo X e Y adaptam ao intervalo visível. Tooltip com valor, seta de tendência e horário. |
-| **Previsão AR2** | Extensão preditiva no gráfico principal baseada no algoritmo AR2 (autoregressivo de ordem 2), com 20–30 min de horizonte. Exibida como linha tracejada com tom mais claro da cor da zona atual. |
+| **Previsão AR2** | Extensão preditiva no gráfico principal. Algoritmo idêntico ao NS (`ar2.js`): espaço logarítmico, coeficientes [-0.723, 1.716], passos fixos de 5 min (cobertura ~60 min), médias em bucket para s0/s1, clamping [36, 400] mg/dL. |
 | **Marcadores de Tratamento** | Ícones sobre o gráfico de glicose indicando bolus de refeição (🍽️), correção (💉), insulina lenta (🔵), carboidratos (🌾), sensor/cateter/caneta novos (📌) e outros. Tooltip ao passar o mouse. |
 | **Tempo no Alvo (TIR)** | Barra empilhada (Muito Baixo → Muito Alto) + tabela com metas internacionais, tempo/dia real e indicadores ✓/✗. Ordem e cores refletem a progressão de risco. |
 | **Padrão Diário (AGP)** | Eixo fixo 00:00–23:00 (padrão clínico AGP). Bandas P5–P25–P75–P95 + mediana. Estatísticas inline: Média, GMI, CV%, % no Alvo com semáforo. |
 | **Comparação de Períodos** | Sobrepõe a média horária do período atual (verde) com o período anterior equivalente (cinza tracejado). Grade de estatísticas com delta arrows (↑↓→). Disponível para 24h/7d/14d/30d. Colapsável. |
-| **Cartão de Glicose Atual** | Valor em destaque com cor por zona, seta de tendência, delta, badge de status e alerta de dados antigos. Suporte a mg/dL e mmol/L. IOB e COB exibidos em tempo real. |
+| **Cartão de Glicose Atual** | Valor em destaque com cor por zona, seta de tendência (mapeada do campo `direction` do NS — 12 direções), delta com bucket averaging estilo NS (correto para leituras de 1 min do Libre), badge de status, alerta de dados antigos. IOB e COB em tempo real. |
 | **Grid de Estatísticas** | 4 cards: Média · GMI · A1c Estimada · CV% com semáforo verde/amarelo/vermelho. |
 | **Alertas de Padrões** | Cards de alerta para padrões detectados com severidade (baixa/média/alta). |
 
@@ -80,30 +80,44 @@ Interface moderna, responsiva e rica em recursos para monitoramento contínuo de
 
 **Calculadora de Bolus**
 
-Acessível pelo ícone de calculadora (🧮) no header. Calcula a dose sugerida com base em:
+Acessível pelo ícone de calculadora (🧮) no header. Algoritmo inspirado no Bolus Wizard Preview (BWP) do Nightscout. Calcula a dose sugerida com base em:
 
 - Glicose atual (preenchida automaticamente pelo sensor, editável)
 - Carboidratos da refeição
 - IOB atual (calculado automaticamente)
-- ISF, ICR e glicose alvo (configuráveis globalmente e ajustáveis por-cálculo)
+- ISF, ICR e **faixa alvo** mín/máx (configuráveis globalmente e ajustáveis por-cálculo)
+- Carboidratos recentes (última hora — exibidos como contexto)
 
-**Fórmula:**
+**Fórmula (espelho do NS BWP):**
 ```
-Correção  = (BG_atual − Alvo) / ISF
+Projetado = BG_atual − IOB × ISF        (glicose esperada após o IOB se esgotar)
+Correção  = 0                            se Projetado ∈ [AlvoMín, AlvoMáx]
+          = (Projetado − AlvoMáx) / ISF  se acima  (positivo → mais insulina)
+          = (Projetado − AlvoMín) / ISF  se abaixo (negativo → excesso de insulina)
 Carbos    = gramas / ICR
-Sugerido  = max(0, Carbos + Correção − IOB)
-Dose      = arredondar(Sugerido, passo da caneta)
+Sugerido  = Carbos + Correção            (pode ser negativo)
+Dose      = arredondar(max(0, Sugerido), passo da caneta)
 ```
 
-A dose final é arredondada para o passo da caneta rápida configurada (1 U ou 0,5 U). O breakdown detalhado é exibido em tempo real:
+O breakdown detalhado é exibido em tempo real:
 
 ```
-Carbos:     +3,3 U
-Correção:   +0,8 U
-IOB:        −0,5 U
-─────────────────
-Calculado:  3,60 U
-Dose:       3,5 U  (0,5 U/dose)
+Glicose projetada (após IOB): 115 mg/dL
+Carbos:      +3,33 U
+Correção:    +0,00 U  (dentro do alvo 100–120)
+──────────────────────────────────────────
+Calculado:    3,33 U
+Dose (1 U):   3 U
+
+── Alternativa — Basal Temporária: ─────
+30 min:  60%
+1 hora:  80%
+```
+
+Quando o cálculo resulta em valor negativo (excesso de insulina ativa):
+```
+⚠️ Excesso de insulina ativa
+Equivalente a 8g de carboidratos para cobrir
 ```
 
 Ao confirmar, abre o TreatmentModal pré-preenchido como **Meal Bolus** ou **Correction Bolus**.
@@ -135,8 +149,9 @@ Thresholds configuráveis na página de Configurações.
 | Taxa basal programada | U/h da bomba (0 = usuário de caneta / MDI) |
 | ISF | Insulin Sensitivity Factor — mg/dL por unidade (para calculadora) |
 | ICR | Insulin-to-Carb Ratio — gramas por unidade (para calculadora) |
-| Glicose Alvo | Alvo para cálculo de dose de correção (para calculadora) |
+| Faixa Alvo (Mín/Máx) | Faixa-alvo para cálculo de correção — sem correção se glicose projetada dentro da faixa |
 | Passo da caneta rápida | Incremento da caneta: 1 U ou 0,5 U (arredondamento da dose) |
+| Preditivo AR2 padrão | Exibir linha de previsão AR2 ao abrir o gráfico (ligado/desligado) |
 | Idades de dispositivos | Thresholds de atenção/alerta para cada tipo de dispositivo |
 
 ---
@@ -279,7 +294,9 @@ Campos suportados em `PUT /api/settings`:
   "isf": 50,
   "icr": 15,
   "targetBG": 100,
+  "targetBGHigh": 120,
   "rapidPenStep": 1,
+  "predictionsDefault": false,
   "deviceAgeThresholds": { ... }
 }
 ```
@@ -405,12 +422,24 @@ Os limiares abaixo são os padrões internacionais. Todos são configuráveis na
 - Passo da caneta rápida (1 U / 0,5 U) registrado via careportal e usado na calculadora
 - Suporte a Temp Basal (taxa e duração) para usuários de bomba de insulina
 
-### Fase 7 — Relatórios (próximo)
+### Fase 7 — Fidelidade ao Nightscout ✅
+- **Setas de tendência**: mapeadas do campo `direction` (string) — 12 direções idênticas ao NS (`FortyFiveUp`, `DoubleDown`, etc.)
+- **Delta com bucket averaging**: algoritmo NS `bgnow.js` aplicado no frontend — janelas de 5 min (correto para Libre com leituras de 1 min)
+- **AR2 idêntico ao NS** (`ar2.js`): espaço log, coef. [-0.723, 1.716], passos fixos 5 min, clamping [36, 400]
+- **Calculadora de Bolus aprimorada** (espelho do NS BWP):
+  - Faixa alvo (mín/máx) em vez de ponto único
+  - Glicose projetada (após IOB) exibida no breakdown
+  - Equivalente em carboidratos quando resultado é negativo
+  - Sugestões de basal temporária (30 min / 1 h) — apenas quando taxa basal configurada
+  - Carboidratos recentes da última hora exibidos como contexto
+- **Temas de cor**: Padrão, Dracula e outros — selecionáveis no header
+
+### Fase 9 — Relatórios (próximo)
 - PDF estilo AGP
 - Resumo semanal
 - Export CSV
 
-### Fase 8 — Integrações
+### Fase 10 — Integrações
 - Claude AI via MCP LibreLink
 - Dados de loop (AndroidAPS / Loop)
 

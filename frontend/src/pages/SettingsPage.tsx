@@ -120,7 +120,9 @@ export function SettingsPage() {
     isf, setIsf,
     icr, setIcr,
     targetBG, setTargetBG,
+    targetBGHigh, setTargetBGHigh,
     rapidPenStep, setRapidPenStep,
+    predictionsDefault, setPredictionsDefault,
   } = useDashboardStore();
 
   function handleThemeSelect(newColorTheme: ColorTheme, newDarkMode: boolean) {
@@ -209,6 +211,19 @@ export function SettingsPage() {
     const mgdl = Math.round(fromDisplayUnit(num, unit) * 10) / 10;
     setTargetBG(mgdl);
     saveSettings({ targetBG: mgdl }).catch(() => {});
+  }
+
+  function handleTargetBGHighChange(value: string) {
+    const num = parseFloat(value);
+    if (isNaN(num) || num <= 0) return;
+    const mgdl = Math.round(fromDisplayUnit(num, unit) * 10) / 10;
+    setTargetBGHigh(mgdl);
+    saveSettings({ targetBGHigh: mgdl }).catch(() => {});
+  }
+
+  function handlePredictionsDefaultChange(on: boolean) {
+    setPredictionsDefault(on);
+    saveSettings({ predictionsDefault: on }).catch(() => {});
   }
 
   function handleDeviceAgeReset() {
@@ -475,6 +490,34 @@ export function SettingsPage() {
                 Usado para calcular o COB (Carboidratos Ativos). Carboidratos simples
                 absorvem mais rápido; refeições com gordura/proteína, mais devagar.
               </p>
+            </div>
+
+            {/* AR2 Prediction default */}
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label className="flex items-center gap-1.5">
+                  <Activity className="h-3.5 w-3.5" />
+                  Preditivo AR2 ativado por padrão
+                </Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Exibe a linha de previsão de glicose ao abrir o gráfico.
+                  Pode ser alterado pontualmente no próprio gráfico.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={predictionsDefault}
+                onClick={() => handlePredictionsDefaultChange(!predictionsDefault)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent
+                            transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
+                            ${predictionsDefault ? 'bg-primary' : 'bg-input'}`}
+              >
+                <span
+                  className={`pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform
+                              ${predictionsDefault ? 'translate-x-5' : 'translate-x-0'}`}
+                />
+              </button>
             </div>
           </CardContent>
         </Card>
@@ -800,28 +843,49 @@ export function SettingsPage() {
               </p>
             </div>
 
-            {/* Target BG */}
+            {/* Target BG — faixa mín / máx */}
             <div className="space-y-1.5">
-              <Label htmlFor="targetBG">
-                Glicose Alvo
-              </Label>
-              <div className="relative max-w-[180px]">
-                <Input
-                  id="targetBG"
-                  type="number"
-                  min="1"
-                  step={unit === 'mmol' ? '0.1' : '1'}
-                  placeholder={unit === 'mmol' ? '5.5' : '100'}
-                  value={targetBG > 0 ? String(Math.round(toDisplayUnit(targetBG, unit) * 10) / 10) : ''}
-                  onChange={(e) => handleTargetBGChange(e.target.value)}
-                  onBlur={(e) => handleTargetBGChange(e.target.value)}
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                  {ul}
-                </span>
+              <Label>Faixa Alvo</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Mínimo</p>
+                  <div className="relative">
+                    <Input
+                      id="targetBG"
+                      type="number"
+                      min="1"
+                      step={unit === 'mmol' ? '0.1' : '1'}
+                      placeholder={unit === 'mmol' ? '5.5' : '100'}
+                      value={targetBG > 0 ? String(Math.round(toDisplayUnit(targetBG, unit) * 10) / 10) : ''}
+                      onChange={(e) => handleTargetBGChange(e.target.value)}
+                      onBlur={(e) => handleTargetBGChange(e.target.value)}
+                    />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                      {ul}
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Máximo</p>
+                  <div className="relative">
+                    <Input
+                      id="targetBGHigh"
+                      type="number"
+                      min="1"
+                      step={unit === 'mmol' ? '0.1' : '1'}
+                      placeholder={unit === 'mmol' ? '6.7' : '120'}
+                      value={targetBGHigh > 0 ? String(Math.round(toDisplayUnit(targetBGHigh, unit) * 10) / 10) : ''}
+                      onChange={(e) => handleTargetBGHighChange(e.target.value)}
+                      onBlur={(e) => handleTargetBGHighChange(e.target.value)}
+                    />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                      {ul}
+                    </span>
+                  </div>
+                </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Valor de glicose desejado para o cálculo da dose de correção.
+                A correção é zero quando a glicose projetada (após IOB) está dentro dessa faixa.
               </p>
             </div>
 

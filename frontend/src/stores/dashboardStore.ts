@@ -39,8 +39,10 @@ interface DashboardState {
   scheduledBasalRate: number; // Pump scheduled basal rate U/h (0 = not configured / MDI user)
   isf:          number;    // Insulin Sensitivity Factor mg/dL per U (default 50)
   icr:          number;    // Insulin-to-Carb Ratio g per U (default 15)
-  targetBG:     number;    // Target blood glucose mg/dL (default 100)
-  rapidPenStep: 0.5 | 1;  // Rapid pen dosing increment in U (default 1)
+  targetBG:     number;    // Target BG low end mg/dL (default 100)
+  targetBGHigh: number;    // Target BG high end mg/dL (default 120)
+  rapidPenStep:       0.5 | 1;  // Rapid pen dosing increment in U (default 1)
+  predictionsDefault: boolean;   // AR2 prediction on by default (default false)
   setPeriod: (period: Period) => void;
   toggleDarkMode: () => void;
   setDarkMode: (dark: boolean) => void;
@@ -57,7 +59,9 @@ interface DashboardState {
   setIsf:          (isf:          number)    => void;
   setIcr:          (icr:          number)    => void;
   setTargetBG:     (targetBG:     number)    => void;
-  setRapidPenStep: (step: 0.5 | 1)           => void;
+  setTargetBGHigh: (targetBGHigh: number)    => void;
+  setRapidPenStep:       (step: 0.5 | 1)  => void;
+  setPredictionsDefault: (on: boolean)     => void;
   initFromServer: (settings: AppSettings) => void;
 }
 
@@ -85,7 +89,9 @@ export const useDashboardStore = create<DashboardState>()(
       isf:          50,
       icr:          15,
       targetBG:     100,
-      rapidPenStep: 1,
+      targetBGHigh: 120,
+      rapidPenStep:       1,
+      predictionsDefault: false,
 
       setPeriod: (period) => set({ period }),
 
@@ -126,10 +132,12 @@ export const useDashboardStore = create<DashboardState>()(
 
       setScheduledBasalRate: (scheduledBasalRate) => set({ scheduledBasalRate }),
 
-      setIsf:          (isf)          => set({ isf }),
-      setIcr:          (icr)          => set({ icr }),
-      setTargetBG:     (targetBG)     => set({ targetBG }),
-      setRapidPenStep: (rapidPenStep) => set({ rapidPenStep }),
+      setIsf:                (isf)                => set({ isf }),
+      setIcr:                (icr)                => set({ icr }),
+      setTargetBG:           (targetBG)           => set({ targetBG }),
+      setTargetBGHigh:       (targetBGHigh)       => set({ targetBGHigh }),
+      setRapidPenStep:       (rapidPenStep)       => set({ rapidPenStep }),
+      setPredictionsDefault: (predictionsDefault) => set({ predictionsDefault }),
 
       initFromServer: (settings) => set((state) => ({
         unit:            settings.unit            ?? state.unit,
@@ -145,7 +153,9 @@ export const useDashboardStore = create<DashboardState>()(
         isf:          settings.isf          ?? state.isf,
         icr:          settings.icr          ?? state.icr,
         targetBG:     settings.targetBG     ?? state.targetBG,
-        rapidPenStep: settings.rapidPenStep ?? state.rapidPenStep,
+        targetBGHigh: settings.targetBGHigh ?? state.targetBGHigh,
+        rapidPenStep:       settings.rapidPenStep       ?? state.rapidPenStep,
+        predictionsDefault: settings.predictionsDefault  ?? state.predictionsDefault,
         colorTheme:   (settings.colorTheme as ColorTheme) ?? state.colorTheme,
       })),
     }),
@@ -165,8 +175,10 @@ export const useDashboardStore = create<DashboardState>()(
         scheduledBasalRate:  state.scheduledBasalRate,
         isf:          state.isf,
         icr:          state.icr,
-        targetBG:     state.targetBG,
-        rapidPenStep: state.rapidPenStep,
+        targetBG:           state.targetBG,
+        targetBGHigh:       state.targetBGHigh,
+        rapidPenStep:       state.rapidPenStep,
+        predictionsDefault: state.predictionsDefault,
       }),
     }
   )

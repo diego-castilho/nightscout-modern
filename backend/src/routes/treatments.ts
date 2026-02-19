@@ -26,6 +26,8 @@ const REQUIRED_FIELDS: Record<string, string[]> = {
   'Rapid Pen Change':  [],
   // Pump-specific
   'Temp Basal':        ['rate', 'duration'],
+  // Lifestyle
+  'Exercise':          ['duration'],
 };
 
 const VALID_EVENT_TYPES = Object.keys(REQUIRED_FIELDS);
@@ -66,7 +68,7 @@ router.post('/', async (req, res) => {
   try {
     const { eventType, created_at, timestamp, glucose, carbs, insulin,
             protein, fat, notes, units, glucoseType, enteredBy, duration,
-            rate, rateMode } = req.body;
+            rate, rateMode, exerciseType, intensity } = req.body;
 
     // Validar tipo de evento
     if (!eventType || !VALID_EVENT_TYPES.includes(eventType)) {
@@ -107,6 +109,8 @@ router.post('/', async (req, res) => {
     if (rateMode     != null) doc.rateMode     = String(rateMode);
     if (notes        != null) doc.notes        = String(notes);
     if (units        != null) doc.units        = units;
+    if (exerciseType != null) doc.exerciseType = String(exerciseType);
+    if (intensity    != null) doc.intensity    = String(intensity);
 
     const treatment = await createTreatment(doc as any);
 

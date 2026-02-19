@@ -219,8 +219,10 @@ export interface AppSettings {
   scheduledBasalRate?: number;
   isf?:          number;    // Insulin Sensitivity Factor mg/dL per U
   icr?:          number;    // Insulin-to-Carb Ratio g per U
-  targetBG?:     number;    // Target blood glucose mg/dL
-  rapidPenStep?: 0.5 | 1;  // Rapid pen dosing increment in U
+  targetBG?:     number;    // Target blood glucose low end mg/dL
+  targetBGHigh?: number;    // Target blood glucose high end mg/dL
+  rapidPenStep?:       0.5 | 1;  // Rapid pen dosing increment in U
+  predictionsDefault?: boolean;   // AR2 prediction enabled by default on chart
   colorTheme?:   string;    // UI color theme: 'default' | 'dracula'
 }
 
@@ -252,8 +254,10 @@ export interface Treatment {
   duration?: number;
   protein?: number;
   fat?: number;
-  rate?:     number;                    // U/h (absolute) or % (relative) — Temp Basal
-  rateMode?: 'absolute' | 'relative';  // Temp Basal rate mode
+  rate?:         number;                    // U/h (absolute) or % (relative) — Temp Basal
+  rateMode?:     'absolute' | 'relative';  // Temp Basal rate mode
+  exerciseType?: string;                   // Exercise type (aeróbico, anaeróbico, misto)
+  intensity?:    string;                   // Exercise intensity (leve, moderada, intensa)
 }
 
 export async function getTreatments(params?: {

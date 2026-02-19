@@ -2,7 +2,7 @@
 // TreatmentModal — Formulário de registro de tratamento (Careportal)
 // Suporta: Meal Bolus, Correction Bolus, Carb Correction, BG Check, Note,
 //          Sensor Change, Site Change, Insulin Change,
-//          Basal Pen Change, Rapid Pen Change, Temp Basal
+//          Basal Pen Change, Rapid Pen Change, Temp Basal, Exercise
 // ============================================================================
 
 import { useState } from 'react';
@@ -28,6 +28,7 @@ export const EVENT_TYPES = [
   { value: 'Insulin Change',    label: 'Troca de Insulina (IAGE)' },
   { value: 'Basal Pen Change',  label: 'Nova Caneta Basal' },
   { value: 'Rapid Pen Change',  label: 'Nova Caneta Rápida' },
+  { value: 'Exercise',          label: 'Exercício' },
 ] as const;
 
 export type EventTypeValue = typeof EVENT_TYPES[number]['value'];
@@ -42,7 +43,9 @@ interface FieldConfig {
   rate?: boolean;
   duration?: boolean;
   rateMode?: boolean;
-  penStep?: boolean;  // Rapid pen dosing increment selector
+  penStep?: boolean;       // Rapid pen dosing increment selector
+  exerciseType?: boolean;  // Exercise type selector
+  intensity?: boolean;     // Exercise intensity selector
   // required subsets
   insulinRequired?: boolean;
   carbsRequired?: boolean;
@@ -64,6 +67,7 @@ const FIELD_CONFIG: Record<EventTypeValue, FieldConfig> = {
   'Insulin Change':   { notes: true },
   'Basal Pen Change': { notes: true },
   'Rapid Pen Change': { penStep: true, notes: true },
+  'Exercise':         { duration: true, durationRequired: true, exerciseType: true, intensity: true, notes: true },
 };
 
 // ---- Helpers ----------------------------------------------------------------
@@ -107,8 +111,10 @@ export function TreatmentModal({ onClose, onSuccess, initialValues }: Props) {
   const [rate, setRate]         = useState('');
   const [duration, setDuration] = useState('');
   const [rateMode, setRateMode]   = useState<'absolute' | 'relative'>('absolute');
-  const [penStep, setPenStep]     = useState<0.5 | 1>(1);
-  const [saving, setSaving]       = useState(false);
+  const [penStep, setPenStep]         = useState<0.5 | 1>(1);
+  const [exerciseType, setExerciseType] = useState('aeróbico');
+  const [intensity, setIntensity]       = useState('moderada');
+  const [saving, setSaving]           = useState(false);
   const [errors, setErrors]       = useState<string[]>([]);
 
   const cfg = FIELD_CONFIG[eventType];
@@ -119,6 +125,8 @@ export function TreatmentModal({ onClose, onSuccess, initialValues }: Props) {
     setRate(''); setDuration('');
     setRateMode('absolute');
     setPenStep(1);
+    setExerciseType('aeróbico');
+    setIntensity('moderada');
     setErrors([]);
   }
 
@@ -160,7 +168,9 @@ export function TreatmentModal({ onClose, onSuccess, initialValues }: Props) {
       if (notes)    payload.notes     = notes.trim();
       if (rate)     payload.rate      = parseFloat(rate);
       if (duration) payload.duration  = parseFloat(duration);
-      if (cfg.rateMode) payload.rateMode = rateMode;
+      if (cfg.rateMode)     payload.rateMode     = rateMode;
+      if (cfg.exerciseType) payload.exerciseType = exerciseType;
+      if (cfg.intensity)    payload.intensity    = intensity;
 
       // Persist pen step: update store + server settings
       if (cfg.penStep) {
@@ -405,6 +415,50 @@ export function TreatmentModal({ onClose, onSuccess, initialValues }: Props) {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Tipo de exercício — Exercise only */}
+          {cfg.exerciseType && (
+            <div className="space-y-1.5">
+              <Label>Tipo</Label>
+              <div className="flex gap-4 flex-wrap">
+                {['aeróbico', 'anaeróbico', 'misto'].map((t) => (
+                  <label key={t} className="flex items-center gap-1.5 text-sm cursor-pointer capitalize">
+                    <input
+                      type="radio"
+                      name="exerciseType"
+                      value={t}
+                      checked={exerciseType === t}
+                      onChange={() => setExerciseType(t)}
+                      className="accent-primary"
+                    />
+                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Intensidade — Exercise only */}
+          {cfg.intensity && (
+            <div className="space-y-1.5">
+              <Label>Intensidade</Label>
+              <div className="flex gap-4">
+                {['leve', 'moderada', 'intensa'].map((v) => (
+                  <label key={v} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                    <input
+                      type="radio"
+                      name="intensity"
+                      value={v}
+                      checked={intensity === v}
+                      onChange={() => setIntensity(v)}
+                      className="accent-primary"
+                    />
+                    {v.charAt(0).toUpperCase() + v.slice(1)}
+                  </label>
+                ))}
+              </div>
             </div>
           )}
 

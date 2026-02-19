@@ -35,7 +35,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { getTreatments } from '../../lib/api';
 import type { GlucoseEntry, Treatment } from '../../lib/api';
 import { useDashboardStore, getPeriodDates, type Period, type AlarmThresholds } from '../../stores/dashboardStore';
-import { getTrendArrow } from '../../lib/utils';
+import { getTrendArrow, timeAgo } from '../../lib/utils';
 import { formatGlucose, unitLabel } from '../../lib/glucose';
 import type { GlucoseUnit } from '../../lib/glucose';
 
@@ -66,6 +66,7 @@ const TREATMENT_VISUAL: Record<string, { color: string; label: string; char: str
   'Basal Pen Change': { color: '#818cf8', label: 'Caneta Basal',        char: 'L' },
   'Rapid Pen Change': { color: '#fb7185', label: 'Caneta Rápida',       char: 'F' },
   'Temp Basal':       { color: '#8b5cf6', label: 'Basal Temporária',    char: 'T' },
+  'Exercise':         { color: '#10b981', label: 'Exercício',           char: 'E' },
 };
 
 // TIR zone colors (matching TIRChart)
@@ -112,24 +113,69 @@ function buildStrokeStops(minVal: number, maxVal: number, t: AlarmThresholds) {
 }
 
 // ── AR2 prediction algorithm ─────────────────────────────────────────────────
+// Mirrors Nightscout ar2.js exactly:
+//   - Works in log space: log(sgv / BG_REF)
+//   - AR coefficients: curr_new = -0.723*prev + 1.716*curr
+//   - Fixed 5-min steps regardless of CGM reading interval (Libre = 1 min)
+//   - curr (s0) = bucket mean of readings in [latest-2.5min, latest+2.5min]
+//   - prev (s1) = bucket mean of readings in [latest-7.5min, latest-2.5min]
+//   - 12 steps × 5 min = 60 min of prediction
+
+const BG_REF = 140;
+const BG_MIN = 36;
+const BG_MAX = 400;
+const AR_COEF = [-0.723, 1.716] as const;
+const AR2_STEP_MS      = 5 * 60_000;
+const AR2_BUCKET_OFFSET = 2.5 * 60_000;
+const AR2_BUCKET_SIZE   = 5.0 * 60_000;
 
 function calculateAR2(
   entries: GlucoseEntry[],
-  steps = 6
+  steps = 12
 ): Array<{ time: number; sgvPredicted: number }> {
   if (entries.length < 2) return [];
+
   const sorted = [...entries].sort((a, b) => b.date - a.date);
-  const last = sorted[0];
-  const prev = sorted[1];
-  if (Date.now() - last.date > 10 * 60_000) return [];
-  const interval = Math.max(3 * 60_000, Math.min(10 * 60_000, last.date - prev.date));
+  const latest = sorted[0];
+
+  if (Date.now() - latest.date > 10 * 60_000) return [];
+
+  const bucketMean = (arr: GlucoseEntry[]) =>
+    arr.reduce((s, e) => s + e.sgv, 0) / arr.length;
+
+  const recentBucket = entries.filter(
+    e => e.date >= latest.date - AR2_BUCKET_OFFSET && e.date <= latest.date + AR2_BUCKET_OFFSET
+  );
+  const prevBucket = entries.filter(
+    e => e.date >= latest.date - AR2_BUCKET_OFFSET - AR2_BUCKET_SIZE &&
+         e.date <  latest.date - AR2_BUCKET_OFFSET
+  );
+
+  if (!recentBucket.length || !prevBucket.length) return [];
+
+  const bgnowMean    = bucketMean(recentBucket);
+  const mean5MinsAgo = bucketMean(prevBucket);
+
+  if (bgnowMean < BG_MIN || mean5MinsAgo < BG_MIN) return [];
+
+  // Initialize in log space (mirrors NS initAR2)
+  let prev = Math.log(mean5MinsAgo / BG_REF);
+  let curr = Math.log(bgnowMean    / BG_REF);
+  let forecastTime = latest.date;
+
   const predictions: Array<{ time: number; sgvPredicted: number }> = [];
-  let s0 = last.sgv, s1 = prev.sgv;
+
   for (let i = 1; i <= steps; i++) {
-    const p = Math.max(40, Math.min(400, 1.6 * s0 - 0.6 * s1));
-    predictions.push({ time: last.date + i * interval, sgvPredicted: p });
-    s1 = s0; s0 = p;
+    forecastTime += AR2_STEP_MS;
+    const nextCurr = AR_COEF[0] * prev + AR_COEF[1] * curr;
+    const mgdl = Math.max(BG_MIN, Math.min(BG_MAX,
+      Math.round(BG_REF * Math.exp(nextCurr))
+    ));
+    predictions.push({ time: forecastTime, sgvPredicted: mgdl });
+    prev = curr;
+    curr = nextCurr;
   }
+
   return predictions;
 }
 
@@ -167,13 +213,18 @@ function TreatmentTooltipContent({ treatment, unit }: { treatment: Treatment; un
   const ul = unitLabel(unit);
   const cfg = TREATMENT_VISUAL[treatment.eventType];
   const labelPT = cfg?.label ?? treatment.eventType;
+  const createdAtMs = new Date(treatment.created_at).getTime();
   const timeStr = format(new Date(treatment.created_at), "dd/MM 'às' HH:mm", { locale: ptBR });
 
   return (
     <div>
       <p className="font-semibold text-xs mb-0.5" style={{ color: cfg?.color }}>{labelPT}</p>
-      <p className="text-[10px] text-muted-foreground mb-1.5">{timeStr}</p>
+      <p className="text-[10px] text-muted-foreground mb-1.5">
+        {timeStr} · {timeAgo(createdAtMs)}
+      </p>
       <div className="space-y-0.5 text-xs">
+        {treatment.exerciseType != null && <p>Tipo: <span className="font-medium capitalize">{treatment.exerciseType}</span></p>}
+        {treatment.intensity    != null && <p>Intensidade: <span className="font-medium capitalize">{treatment.intensity}</span></p>}
         {treatment.rate     != null && <p>Taxa: <span className="font-medium">{treatment.rate} {treatment.rateMode === 'relative' ? '%' : 'U/h'}</span></p>}
         {treatment.duration != null && <p>Duração: <span className="font-medium">{treatment.duration} min</span></p>}
         {treatment.insulin  != null && <p>Insulina: <span className="font-medium">{treatment.insulin}U</span></p>}
@@ -253,7 +304,7 @@ function CustomTooltip({ active, payload, unit, thresholds }: CustomTooltipProps
       </p>
       <p className="font-bold text-base" style={{ color }}>
         {formatGlucose(value, unit)} {unitLabel(unit)}
-        {!isPrediction && getTrendArrow(point.trend)}
+        {!isPrediction && getTrendArrow(point.direction)}
       </p>
     </div>
   );
@@ -274,13 +325,16 @@ function tempBasalColor(treatment: Treatment, scheduledRate: number): string {
 }
 
 export function GlucoseAreaChart({ entries, loading }: Props) {
-  const { period, unit, alarmThresholds, darkMode, lastRefresh, scheduledBasalRate } = useDashboardStore();
+  const { period, unit, alarmThresholds, darkMode, lastRefresh, scheduledBasalRate, predictionsDefault } = useDashboardStore();
 
   // Zoom state
   const [zoomLeft, setZoomLeft]         = useState<number | null>(null);
   const [zoomRight, setZoomRight]       = useState<number | null>(null);
   const [zoomedDomain, setZoomedDomain] = useState<[number, number] | null>(null);
   const isZoomed = zoomedDomain !== null;
+
+  // Prediction toggle — initialized from user's default preference
+  const [predictionsEnabled, setPredictionsEnabled] = useState(predictionsDefault);
 
   // Treatment markers state
   const [treatments, setTreatments] = useState<Treatment[]>([]);
@@ -333,16 +387,12 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
     .map((e) => ({ time: e.date, sgv: e.sgv, direction: e.direction, trend: e.trend }));
 
   // ── AR2 predictions ─────────────────────────────────────────────────────────
-  const showPredictions = ['1h', '3h', '6h', '12h', '24h'].includes(period);
+  const showPredictions = predictionsEnabled && ['1h', '3h', '6h', '12h', '24h'].includes(period);
   let chartData: ChartPoint[] = data.map((d) => ({ ...d }));
 
   if (showPredictions && data.length >= 2) {
     const predPoints = calculateAR2(entries);
     if (predPoints.length > 0) {
-      chartData[chartData.length - 1] = {
-        ...chartData[chartData.length - 1],
-        sgvPredicted: chartData[chartData.length - 1].sgv,
-      };
       predPoints.forEach((p) =>
         chartData.push({ time: p.time, sgvPredicted: p.sgvPredicted })
       );
@@ -480,11 +530,6 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
                     return <stop key={i} offset={s.offset} stopColor={s.color} stopOpacity={op} />;
                   })}
                 </linearGradient>
-                <linearGradient id="predStroke" x1="0" y1="0" x2="0" y2="1">
-                  {strokeStops.map((s, i) => (
-                    <stop key={i} offset={s.offset} stopColor={s.color} stopOpacity={0.6} />
-                  ))}
-                </linearGradient>
               </defs>
 
               <CartesianGrid
@@ -549,16 +594,17 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
                 connectNulls={false}
               />
 
-              {/* AR2 prediction line */}
+              {/* AR2 prediction — dashed cyan line, hollow circle on hover */}
               {showPredictions && (
                 <Line
                   type="monotone"
                   dataKey="sgvPredicted"
-                  stroke="url(#predStroke)"
+                  stroke="#06b6d4"
                   strokeWidth={2}
+                  strokeOpacity={0.75}
                   strokeDasharray="5 4"
-                  dot={{ r: 3, strokeWidth: 0, opacity: 0.7 }}
-                  activeDot={{ r: 5, stroke: '#fff', strokeWidth: 2 }}
+                  dot={false}
+                  activeDot={{ r: 5, fill: 'none', stroke: '#06b6d4', strokeWidth: 2 }}
                   connectNulls={false}
                   isAnimationActive={false}
                 />
@@ -629,22 +675,34 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
           )}
         </div>
 
-        {/* Legend — shown only when treatment markers are present in the visible window */}
-        {showTreatments && visibleTreatments.length > 0 && (
-          <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-2 pt-2 border-t border-border/50">
-            {Object.entries(TREATMENT_VISUAL)
-              .filter(([type]) => visibleEventTypes.includes(type))
-              .map(([type, { color, char, label }]) => (
-                <div key={type} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                  <span
-                    className="inline-flex items-center justify-center rounded-full text-white font-bold shrink-0"
-                    style={{ backgroundColor: color, width: 15, height: 15, fontSize: 8 }}
-                  >
-                    {char}
-                  </span>
-                  {label}
-                </div>
-              ))}
+        {/* Legend + prediction toggle — shown for periods ≤ 24h */}
+        {showTreatments && (
+          <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-border/50">
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+              {visibleTreatments.length > 0 && Object.entries(TREATMENT_VISUAL)
+                .filter(([type]) => visibleEventTypes.includes(type))
+                .map(([type, { color, char, label }]) => (
+                  <div key={type} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                    <span
+                      className="inline-flex items-center justify-center rounded-full text-white font-bold shrink-0"
+                      style={{ backgroundColor: color, width: 15, height: 15, fontSize: 8 }}
+                    >
+                      {char}
+                    </span>
+                    {label}
+                  </div>
+                ))}
+            </div>
+            <button
+              onClick={() => setPredictionsEnabled((v) => !v)}
+              className={`shrink-0 text-[10px] px-2 py-0.5 rounded border transition-colors select-none ${
+                predictionsEnabled
+                  ? 'bg-cyan-500/10 border-cyan-500/40 text-cyan-600 dark:text-cyan-400'
+                  : 'bg-muted/80 border-border text-muted-foreground'
+              }`}
+            >
+              Preditivo
+            </button>
           </div>
         )}
       </CardContent>

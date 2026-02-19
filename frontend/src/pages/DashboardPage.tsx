@@ -146,6 +146,7 @@ export function DashboardPage() {
         <CurrentGlucoseCard
           latest={latest}
           previous={latest ? [...entries].reverse().find(e => e.date < latest.date) : undefined}
+          entries={entries}
           loading={loading}
         />
 

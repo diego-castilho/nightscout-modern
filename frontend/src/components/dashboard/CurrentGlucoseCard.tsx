@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent } from '../ui/card';
-import { getTrendArrow, getTrendDescription } from '../../lib/utils';
+import { getTrendArrow, getTrendDescription, timeAgo } from '../../lib/utils';
 import { formatGlucose as fmtGlucose, unitLabel } from '../../lib/glucose';
 import { useDashboardStore } from '../../stores/dashboardStore';
 import type { AlarmThresholds } from '../../stores/dashboardStore';
@@ -19,7 +19,33 @@ import type { AgeLevel, DeviceAge } from '../../lib/deviceAge';
 interface Props {
   latest: GlucoseEntry | null;
   previous?: GlucoseEntry | null;
+  entries?: GlucoseEntry[];
   loading: boolean;
+}
+
+// Mirrors Nightscout bgnow.js calcDelta with bucket averaging.
+// Recent bucket  = [latest - 2.5min, latest + 2.5min]
+// Previous bucket = [latest - 7.5min, latest - 2.5min]
+// When gap > 9 min between bucket centers, interpolates to 5-min equivalent.
+function calcNSDelta(latest: GlucoseEntry, entries: GlucoseEntry[]): number | undefined {
+  const OFFSET = 2.5 * 60_000;
+  const BUCKET = 5.0 * 60_000;
+
+  const recentBucket = entries.filter(e => e.date >= latest.date - OFFSET && e.date <= latest.date + OFFSET);
+  const prevBucket   = entries.filter(e => e.date >= latest.date - OFFSET - BUCKET && e.date < latest.date - OFFSET);
+
+  if (!recentBucket.length || !prevBucket.length) return undefined;
+
+  const mean = (arr: GlucoseEntry[]) => arr.reduce((s, e) => s + e.sgv, 0) / arr.length;
+  const recentMean = mean(recentBucket);
+  const prevMean   = mean(prevBucket);
+
+  const elapsedMins = (Math.max(...recentBucket.map(e => e.date)) - Math.max(...prevBucket.map(e => e.date))) / 60_000;
+  const absolute    = recentMean - prevMean;
+
+  return elapsedMins > 9
+    ? Math.round(absolute / elapsedMins * 5)
+    : Math.round(absolute);
 }
 
 const LEVEL_CONFIG = {
@@ -119,7 +145,7 @@ function AgePill({ deviceLabel, age }: AgePillProps) {
 
 // ── Main card ─────────────────────────────────────────────────────────────────
 
-export function CurrentGlucoseCard({ latest, previous, loading }: Props) {
+export function CurrentGlucoseCard({ latest, previous, entries, loading }: Props) {
   const { unit, alarmThresholds } = useDashboardStore();
   const iob = useIOB();
   const cob = useCOB();
@@ -154,17 +180,30 @@ export function CurrentGlucoseCard({ latest, previous, loading }: Props) {
 
   const level = classifyGlucose(latest.sgv, alarmThresholds);
   const config = LEVEL_CONFIG[level];
-  const trendArrow = getTrendArrow(latest.trend);
-  const trendDesc = getTrendDescription(latest.trend);
-  // Prefer delta stored by Nightscout (same value shown in the NS UI).
-  // Fall back to manual diff only when the field is absent.
-  const rawDeltaMgdl = latest.delta !== undefined
-    ? latest.delta
-    : (previous ? latest.sgv - previous.sgv : undefined);
+  const trendArrow = getTrendArrow(latest.direction);
+  const trendDesc = getTrendDescription(latest.direction);
+  // Priority order for delta (mirrors Nightscout behaviour):
+  // 1. Field stored by CGM app (`latest.delta`) — identical to what NS shows
+  // 2. NS bucket averaging using all available entries (best for Libre 1-min data)
+  // 3. Simple interpolated fallback using the immediately previous entry
+  const rawDeltaMgdl = (() => {
+    if (latest.delta !== undefined) return latest.delta;
+    if (entries && entries.length > 1) return calcNSDelta(latest, entries);
+    if (!previous) return undefined;
+    const elapsedMins = (latest.date - previous.date) / 60_000;
+    const absolute    = latest.sgv - previous.sgv;
+    return elapsedMins > 9 ? Math.round(absolute / elapsedMins * 5) : Math.round(absolute);
+  })();
+  // Delta format mirrors Nightscout bgnow.js:
+  //   mg/dL → integer with sign (+5, -3, 0)
+  //   mmol  → 1 decimal with sign (+0.3, -0.2)
   const deltaText = rawDeltaMgdl !== undefined
     ? (() => {
-        const d = unit === 'mmol' ? rawDeltaMgdl / 18.01 : rawDeltaMgdl;
-        return `${d > 0 ? '+' : ''}${d.toFixed(unit === 'mmol' ? 2 : 1)} ${unitLabel(unit)}`;
+        if (unit === 'mmol') {
+          const d = rawDeltaMgdl / 18.01;
+          return `${d > 0 ? '+' : ''}${d.toFixed(1)} ${unitLabel(unit)}`;
+        }
+        return `${rawDeltaMgdl > 0 ? '+' : ''}${rawDeltaMgdl} ${unitLabel(unit)}`;
       })()
     : null;
 
@@ -208,9 +247,12 @@ export function CurrentGlucoseCard({ latest, previous, loading }: Props) {
               {fmtGlucose(latest.sgv, unit)}
             </div>
             <div className="text-sm text-muted-foreground mt-1">{unitLabel(unit)}</div>
-            <div className="mt-2">
+            <div className="mt-2 flex flex-col items-center gap-1">
               <span className={`text-xs font-semibold px-3 py-1 rounded-full ${config.badgeClass}`}>
                 {config.label}
+              </span>
+              <span className={`text-[11px] ${isStale ? 'text-red-500 font-medium' : 'text-muted-foreground'}`}>
+                {timeAgo(latest.date)}
               </span>
             </div>
             {/* IOB / COB pills — only shown when there are active values */}
