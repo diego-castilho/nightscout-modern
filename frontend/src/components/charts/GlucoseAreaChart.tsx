@@ -33,7 +33,7 @@ import { ptBR } from 'date-fns/locale';
 import {
   ZoomOut, X, Trash2,
   Utensils, Syringe, Donut, Droplets, NotebookPen,
-  Disc, Gauge, TestTube, Dumbbell, CakeSlice,
+  Disc, CircleGauge, TestTubeDiagonal, Dumbbell, CakeSlice, Layers,
   type LucideIcon,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -63,12 +63,13 @@ const TREATMENT_VISUAL: Record<string, { color: string; label: string; icon: Luc
   'Meal Bolus':       { color: '#3b82f6', label: 'Refeição + Bolus',   icon: Utensils    },
   'Snack Bolus':      { color: '#ec4899', label: 'Lanche + Bolus',     icon: CakeSlice   },
   'Correction Bolus': { color: '#8b5cf6', label: 'Bolus de Correção',  icon: Syringe     },
+  'Combo Bolus':      { color: '#0d9488', label: 'Combo Bolus',        icon: Layers      },
   'Carb Correction':  { color: '#f97316', label: 'Correção de Carbos', icon: Donut       },
   'BG Check':         { color: '#14b8a6', label: 'Leitura de Glicose', icon: Droplets    },
   'Note':             { color: '#64748b', label: 'Anotação',            icon: NotebookPen },
   'Sensor Change':    { color: '#06b6d4', label: 'Troca de Sensor',     icon: Disc        },
-  'Site Change':      { color: '#22c55e', label: 'Troca de Site',       icon: Gauge       },
-  'Insulin Change':   { color: '#f59e0b', label: 'Troca de Insulina',   icon: TestTube    },
+  'Site Change':      { color: '#22c55e', label: 'Troca de Site',       icon: CircleGauge      },
+  'Insulin Change':   { color: '#f59e0b', label: 'Troca de Insulina',   icon: TestTubeDiagonal },
   'Basal Pen Change': { color: '#818cf8', label: 'Caneta Basal',        icon: Syringe     },
   'Rapid Pen Change': { color: '#fb7185', label: 'Caneta Rápida',       icon: Syringe     },
   'Temp Basal':       { color: '#0ea5e9', label: 'Basal Temporária',    icon: Syringe     },
@@ -232,13 +233,16 @@ function TreatmentTooltipContent({ treatment, unit }: { treatment: Treatment; un
       <div className="space-y-0.5 text-xs">
         {treatment.exerciseType != null && <p>Tipo: <span className="font-medium capitalize">{treatment.exerciseType}</span></p>}
         {treatment.intensity    != null && <p>Intensidade: <span className="font-medium capitalize">{treatment.intensity}</span></p>}
-        {treatment.rate     != null && <p>Taxa: <span className="font-medium">{treatment.rate} {treatment.rateMode === 'relative' ? '%' : 'U/h'}</span></p>}
-        {treatment.duration != null && <p>Duração: <span className="font-medium">{treatment.duration} min</span></p>}
-        {treatment.insulin  != null && <p>Insulina: <span className="font-medium">{treatment.insulin}U</span></p>}
-        {treatment.carbs    != null && <p>Carbos: <span className="font-medium">{treatment.carbs}g</span></p>}
-        {treatment.glucose  != null && <p>Glicose: <span className="font-medium">{formatGlucose(treatment.glucose, unit)} {ul}</span></p>}
-        {treatment.protein  != null && <p>Proteína: <span className="font-medium">{treatment.protein}g</span></p>}
-        {treatment.fat      != null && <p>Gordura: <span className="font-medium">{treatment.fat}g</span></p>}
+        {treatment.rate             != null && <p>Taxa: <span className="font-medium">{treatment.rate} {treatment.rateMode === 'relative' ? '%' : 'U/h'}</span></p>}
+        {treatment.duration         != null && <p>Duração: <span className="font-medium">{treatment.duration} min</span></p>}
+        {treatment.immediateInsulin != null && <p>Imediata: <span className="font-medium">{treatment.immediateInsulin}U</span></p>}
+        {treatment.extendedInsulin  != null && <p>Estendida: <span className="font-medium">{treatment.extendedInsulin}U</span></p>}
+        {treatment.insulin        != null && treatment.eventType !== 'Combo Bolus' && <p>Insulina: <span className="font-medium">{treatment.insulin}U</span></p>}
+        {treatment.carbs          != null && <p>Carbos: <span className="font-medium">{treatment.carbs}g</span></p>}
+        {treatment.protein        != null && <p>Proteína: <span className="font-medium">{treatment.protein}g</span></p>}
+        {treatment.fat            != null && <p>Gordura: <span className="font-medium">{treatment.fat}g</span></p>}
+        {treatment.absorptionTime != null && <p>Absorção: <span className="font-medium">{treatment.absorptionTime} min</span></p>}
+        {treatment.glucose        != null && <p>Glicose: <span className="font-medium">{formatGlucose(treatment.glucose, unit)} {ul}</span></p>}
         {treatment.notes              && <p className="text-muted-foreground italic mt-0.5">"{treatment.notes}"</p>}
       </div>
     </div>
@@ -473,7 +477,7 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
 
   const actualCount = displayData.filter((d) => d.sgv != null).length;
   const showDots = actualCount <= 20;
-  const strokeStops = buildStrokeStops(minVal, maxVal, alarmThresholds);
+  const strokeStops = buildStrokeStops(minVal, rawMax, alarmThresholds);
 
   const refLines: { y: number; color: string; label: string; dash: string }[] = [
     { y: alarmThresholds.veryHigh, color: ZONE.veryHigh, label: String(alarmThresholds.veryHigh), dash: '3 4' },

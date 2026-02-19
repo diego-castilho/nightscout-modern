@@ -14,9 +14,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select } from '../components/ui/select';
 import { Button } from '../components/ui/button';
-import { User, SlidersHorizontal, RefreshCw, RotateCcw, Syringe, Timer, Activity, Calculator, Palette } from 'lucide-react';
-import { useTheme } from '../hooks/useTheme';
-import type { ColorTheme } from '../stores/dashboardStore';
+import { User, SlidersHorizontal, RefreshCw, RotateCcw, Syringe, Timer, Activity, Calculator } from 'lucide-react';
 import { DEFAULT_DEVICE_AGE_THRESHOLDS } from '../lib/deviceAge';
 import type { DeviceAgeThresholds } from '../lib/deviceAge';
 
@@ -107,7 +105,6 @@ const DIA_OPTIONS = [
 ];
 
 export function SettingsPage() {
-  const { darkMode, colorTheme, setDarkMode, setColorTheme } = useTheme();
   const {
     unit, setUnit,
     patientName, setPatientName,
@@ -124,12 +121,6 @@ export function SettingsPage() {
     rapidPenStep, setRapidPenStep,
     predictionsDefault, setPredictionsDefault,
   } = useDashboardStore();
-
-  function handleThemeSelect(newColorTheme: ColorTheme, newDarkMode: boolean) {
-    setColorTheme(newColorTheme);
-    setDarkMode(newDarkMode);
-    saveSettings({ colorTheme: newColorTheme }).catch(() => {});
-  }
 
   // Local threshold state (shown in selected unit)
   const [localThresholds, setLocalThresholds] = useState({
@@ -315,70 +306,6 @@ export function SettingsPage() {
             Personalize o dashboard. As alterações são salvas automaticamente no seu dispositivo.
           </p>
         </div>
-
-        {/* ============ TEMA DE CORES ============ */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Palette className="h-4 w-4" />
-              Tema de Cores
-            </CardTitle>
-            <CardDescription>
-              Escolha entre o tema padrão e o Dracula. O tema Dracula usa a fonte Fira Code.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-3">
-              {/* Padrão Claro */}
-              <button
-                onClick={() => handleThemeSelect('default', false)}
-                className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-colors
-                  ${colorTheme === 'default' && !darkMode
-                    ? 'border-primary bg-primary/10'
-                    : 'border-border hover:border-muted-foreground/50'}`}
-              >
-                <span className="text-2xl">☀️</span>
-                <span className="text-xs font-medium">Padrão Claro</span>
-              </button>
-
-              {/* Padrão Escuro */}
-              <button
-                onClick={() => handleThemeSelect('default', true)}
-                className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-colors
-                  ${colorTheme === 'default' && darkMode
-                    ? 'border-primary bg-primary/10'
-                    : 'border-border hover:border-muted-foreground/50'}`}
-              >
-                <span className="text-2xl">🌙</span>
-                <span className="text-xs font-medium">Padrão Escuro</span>
-              </button>
-
-              {/* Dracula Claro */}
-              <button
-                onClick={() => handleThemeSelect('dracula', false)}
-                className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-colors
-                  ${colorTheme === 'dracula' && !darkMode
-                    ? 'border-primary bg-primary/10'
-                    : 'border-border hover:border-muted-foreground/50'}`}
-              >
-                <span className="text-2xl">🧛</span>
-                <span className="text-xs font-medium">Dracula Claro</span>
-              </button>
-
-              {/* Dracula Escuro */}
-              <button
-                onClick={() => handleThemeSelect('dracula', true)}
-                className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-colors
-                  ${colorTheme === 'dracula' && darkMode
-                    ? 'border-primary bg-primary/10'
-                    : 'border-border hover:border-muted-foreground/50'}`}
-              >
-                <span className="text-2xl">🧛🌙</span>
-                <span className="text-xs font-medium">Dracula Escuro</span>
-              </button>
-            </div>
-          </CardContent>
-        </Card>
 
         {/* ============ EXIBIÇÃO ============ */}
         <Card>

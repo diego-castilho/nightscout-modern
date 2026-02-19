@@ -19,6 +19,10 @@
 // Each micro-bolus has size  deviation_U/h × (5/60) h  and decays via iobFraction.
 // IOB can be negative when a Temp Basal suspends or reduces the scheduled rate.
 // Temp Basal IOB is only calculated when scheduledBasalRate > 0.
+//
+// Combo Bolus is counted in two parts:
+//   - Immediate: standard bolus from created_at (iobFraction applied to full dose)
+//   - Extended: micro-segments over `duration` minutes (always additive, not a deviation)
 // ============================================================================
 
 import type { Treatment } from './api';
@@ -95,9 +99,57 @@ function calculateTempBasalIOB(
 }
 
 /**
+ * Calculates Combo Bolus IOB from its two components:
+ * - Immediate: full dose applied at created_at, decays normally
+ * - Extended: delivered uniformly as 5-min micro-segments over `duration` minutes
+ */
+function calculateComboBolusIOB(treatments: Treatment[], diaMs: number): number {
+  const now = Date.now();
+
+  return treatments.reduce((total, t) => {
+    if (t.eventType !== 'Combo Bolus') return total;
+
+    const startTime = new Date(t.created_at).getTime();
+    let iob = 0;
+
+    // Immediate component
+    if (t.immediateInsulin && t.immediateInsulin > 0) {
+      const elapsed = now - startTime;
+      if (elapsed > 0) {
+        iob += t.immediateInsulin * iobFraction(elapsed, diaMs);
+      }
+    }
+
+    // Extended component: micro-segments over duration
+    if (t.extendedInsulin && t.extendedInsulin > 0 && t.duration) {
+      const endTime      = startTime + t.duration * 60_000;
+      const deliveredEnd = Math.min(now, endTime);
+      if (deliveredEnd > startTime) {
+        for (let seg = startTime; seg < deliveredEnd; seg += SEGMENT_MS) {
+          const segEnd        = Math.min(seg + SEGMENT_MS, deliveredEnd);
+          const segMid        = (seg + segEnd) / 2;
+          const segDurationMin = (segEnd - seg) / 60_000;
+          // Insulin per segment proportional to its duration fraction
+          const segInsulin    = t.extendedInsulin * (segDurationMin / t.duration);
+          const elapsed       = now - segMid;
+          if (elapsed > 0) {
+            iob += segInsulin * iobFraction(elapsed, diaMs);
+          }
+        }
+      }
+    }
+
+    return total + iob;
+  }, 0);
+}
+
+/**
  * Calculates total Insulin on Board from a list of treatments.
  *
- * Bolus IOB: treatments with insulin > 0 (Meal Bolus, Correction Bolus).
+ * Bolus IOB: rapid-acting insulin (Meal Bolus, Snack Bolus, Correction Bolus, Basal Pen Change).
+ * Basal Insulin (long-acting MDI pen) is excluded — its peakless 24–42 h profile is
+ * incompatible with the bilinear Walsh model and it is never counted as bolus IOB
+ * in Nightscout / Loop / OpenAPS.
  * Temp Basal IOB: deviation model — only when scheduledBasalRate > 0.
  *
  * @param treatments         - list of recent treatments (covering at least `diaHours`)
@@ -114,15 +166,21 @@ export function calculateIOB(
   const diaMs = diaHours * 3_600_000;
 
   const bolusIOB = treatments.reduce((sum, t) => {
+    // Exclude long-acting basal insulin — incompatible pharmacokinetics
+    if (t.eventType === 'Basal Insulin') return sum;
+    // Exclude Combo Bolus — handled separately with two-phase model
+    if (t.eventType === 'Combo Bolus')   return sum;
     const insulin = t.insulin;
     if (!insulin || insulin <= 0) return sum;
     const elapsed = now - new Date(t.created_at).getTime();
     return sum + insulin * iobFraction(elapsed, diaMs);
   }, 0);
 
+  const comboIOB = calculateComboBolusIOB(treatments, diaMs);
+
   const basalIOB = scheduledBasalRate > 0
     ? calculateTempBasalIOB(treatments, diaMs, scheduledBasalRate)
     : 0;
 
-  return Math.round((bolusIOB + basalIOB) * 100) / 100;
+  return Math.round((bolusIOB + comboIOB + basalIOB) * 100) / 100;
 }

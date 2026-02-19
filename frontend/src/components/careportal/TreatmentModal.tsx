@@ -1,25 +1,27 @@
 // ============================================================================
 // TreatmentModal — Formulário de registro de tratamento (Careportal)
-// Suporta: Meal Bolus, Correction Bolus, Carb Correction, BG Check, Note,
-//          Sensor Change, Site Change, Insulin Change,
+// Suporta: Meal Bolus, Snack Bolus, Correction Bolus, Combo Bolus, Carb Correction,
+//          BG Check, Note, Sensor Change, Site Change, Insulin Change,
 //          Basal Pen Change, Rapid Pen Change, Temp Basal, Exercise,
 //          Basal Insulin
 // ============================================================================
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { createTreatment, saveSettings } from '../../lib/api';
+import { createTreatment, saveSettings, getLatestGlucose } from '../../lib/api';
 import { useDashboardStore } from '../../stores/dashboardStore';
-import { unitLabel, fromDisplayUnit } from '../../lib/glucose';
+import { unitLabel, fromDisplayUnit, toDisplayUnit } from '../../lib/glucose';
 
 // ---- Definição dos tipos de evento ----------------------------------------
 
 export const EVENT_TYPES = [
   { value: 'Meal Bolus',        label: 'Refeição + Bolus' },
+  { value: 'Snack Bolus',       label: 'Lanche + Bolus' },
   { value: 'Correction Bolus',  label: 'Bolus de Correção' },
+  { value: 'Combo Bolus',       label: 'Combo Bolus' },
   { value: 'Carb Correction',   label: 'Correção de Carbos' },
   { value: 'BG Check',          label: 'Leitura de Glicose' },
   { value: 'Note',              label: 'Anotação' },
@@ -45,9 +47,12 @@ interface FieldConfig {
   rate?: boolean;
   duration?: boolean;
   rateMode?: boolean;
-  penStep?: boolean;       // Rapid pen dosing increment selector
-  exerciseType?: boolean;  // Exercise type selector
-  intensity?: boolean;     // Exercise intensity selector
+  penStep?: boolean;            // Rapid pen dosing increment selector
+  exerciseType?: boolean;       // Exercise type selector
+  intensity?: boolean;          // Exercise intensity selector
+  immediateInsulin?: boolean;   // Combo Bolus immediate component
+  extendedInsulin?: boolean;    // Combo Bolus extended component
+  absorptionTime?: boolean;     // Carb absorption time in minutes
   // required subsets
   insulinRequired?: boolean;
   carbsRequired?: boolean;
@@ -55,12 +60,16 @@ interface FieldConfig {
   notesRequired?: boolean;
   rateRequired?: boolean;
   durationRequired?: boolean;
+  immediateInsulinRequired?: boolean;
+  extendedInsulinRequired?: boolean;
 }
 
 const FIELD_CONFIG: Record<EventTypeValue, FieldConfig> = {
-  'Meal Bolus':       { insulin: true, insulinRequired: true, carbs: true, carbsRequired: true, glucose: true, protein: true, fat: true, notes: true },
+  'Meal Bolus':       { insulin: true, insulinRequired: true, carbs: true, carbsRequired: true, protein: true, fat: true, absorptionTime: true, glucose: true, notes: true },
+  'Snack Bolus':      { insulin: true, insulinRequired: true, carbs: true, carbsRequired: true, protein: true, fat: true, absorptionTime: true, glucose: true, notes: true },
   'Correction Bolus': { insulin: true, insulinRequired: true, glucose: true, notes: true },
-  'Carb Correction':  { carbs: true, carbsRequired: true, glucose: true, notes: true },
+  'Combo Bolus':      { immediateInsulin: true, immediateInsulinRequired: true, extendedInsulin: true, extendedInsulinRequired: true, duration: true, durationRequired: true, carbs: true, protein: true, fat: true, absorptionTime: true, glucose: true, notes: true },
+  'Carb Correction':  { carbs: true, carbsRequired: true, protein: true, fat: true, absorptionTime: true, glucose: true, notes: true },
   'BG Check':         { glucose: true, glucoseRequired: true, notes: true },
   'Note':             { notes: true, notesRequired: true },
   'Temp Basal':       { rate: true, rateRequired: true, duration: true, durationRequired: true, rateMode: true, notes: true },
@@ -111,8 +120,11 @@ export function TreatmentModal({ onClose, onSuccess, initialValues }: Props) {
   const [protein, setProtein]   = useState('');
   const [fat, setFat]           = useState('');
   const [notes, setNotes]       = useState('');
-  const [rate, setRate]         = useState('');
-  const [duration, setDuration] = useState('');
+  const [rate, setRate]                       = useState('');
+  const [duration, setDuration]               = useState('');
+  const [immediateInsulin, setImmediateInsulin] = useState('');
+  const [extendedInsulin,  setExtendedInsulin]  = useState('');
+  const [absorptionTime,   setAbsorptionTime]   = useState('');
   const [rateMode, setRateMode]   = useState<'absolute' | 'relative'>('absolute');
   const [penStep, setPenStep]         = useState<0.5 | 1>(1);
   const [exerciseType, setExerciseType] = useState('aeróbico');
@@ -122,10 +134,26 @@ export function TreatmentModal({ onClose, onSuccess, initialValues }: Props) {
 
   const cfg = FIELD_CONFIG[eventType];
 
+  // Auto-fill glucose from latest sensor reading on mount
+  useEffect(() => {
+    getLatestGlucose()
+      .then((entry) => {
+        if (entry?.sgv) {
+          setGlucose((prev) => {
+            if (prev) return prev; // already set (e.g. from initialValues)
+            const display = toDisplayUnit(entry.sgv, unit);
+            return unit === 'mmol' ? display.toFixed(1) : String(Math.round(display));
+          });
+        }
+      })
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   function resetFields() {
     setInsulin(''); setCarbs(''); setGlucose('');
     setProtein(''); setFat(''); setNotes('');
     setRate(''); setDuration('');
+    setImmediateInsulin(''); setExtendedInsulin(''); setAbsorptionTime('');
     setRateMode('absolute');
     setPenStep(1);
     setExerciseType('aeróbico');
@@ -140,12 +168,14 @@ export function TreatmentModal({ onClose, onSuccess, initialValues }: Props) {
 
   function validate(): boolean {
     const errs: string[] = [];
-    if (cfg.insulinRequired  && !insulin)       errs.push('Insulina é obrigatória.');
-    if (cfg.carbsRequired    && !carbs)         errs.push('Carbos são obrigatórios.');
-    if (cfg.glucoseRequired  && !glucose)       errs.push('Glicose é obrigatória.');
-    if (cfg.notesRequired    && !notes.trim())  errs.push('Texto da anotação é obrigatório.');
-    if (cfg.rateRequired     && !rate)          errs.push('Taxa basal é obrigatória.');
-    if (cfg.durationRequired && !duration)      errs.push('Duração é obrigatória.');
+    if (cfg.insulinRequired           && !insulin)          errs.push('Insulina é obrigatória.');
+    if (cfg.carbsRequired             && !carbs)            errs.push('Carbos são obrigatórios.');
+    if (cfg.glucoseRequired           && !glucose)          errs.push('Glicose é obrigatória.');
+    if (cfg.notesRequired             && !notes.trim())     errs.push('Texto da anotação é obrigatório.');
+    if (cfg.rateRequired              && !rate)             errs.push('Taxa basal é obrigatória.');
+    if (cfg.durationRequired          && !duration)         errs.push('Duração é obrigatória.');
+    if (cfg.immediateInsulinRequired  && !immediateInsulin) errs.push('Insulina imediata é obrigatória.');
+    if (cfg.extendedInsulinRequired   && !extendedInsulin)  errs.push('Insulina estendida é obrigatória.');
     setErrors(errs);
     return errs.length === 0;
   }
@@ -163,14 +193,17 @@ export function TreatmentModal({ onClose, onSuccess, initialValues }: Props) {
 
       const payload: Record<string, unknown> = { eventType, created_at };
 
-      if (insulin)  payload.insulin   = parseFloat(insulin);
-      if (carbs)    payload.carbs     = parseFloat(carbs);
-      if (glucose)  payload.glucose   = fromDisplayUnit(parseFloat(glucose), unit);
-      if (protein)  payload.protein   = parseFloat(protein);
-      if (fat)      payload.fat       = parseFloat(fat);
-      if (notes)    payload.notes     = notes.trim();
-      if (rate)     payload.rate      = parseFloat(rate);
-      if (duration) payload.duration  = parseFloat(duration);
+      if (insulin)          payload.insulin          = parseFloat(insulin);
+      if (carbs)            payload.carbs            = parseFloat(carbs);
+      if (glucose)          payload.glucose          = fromDisplayUnit(parseFloat(glucose), unit);
+      if (protein)          payload.protein          = parseFloat(protein);
+      if (fat)              payload.fat              = parseFloat(fat);
+      if (notes)            payload.notes            = notes.trim();
+      if (rate)             payload.rate             = parseFloat(rate);
+      if (duration)         payload.duration         = parseFloat(duration);
+      if (immediateInsulin) payload.immediateInsulin = parseFloat(immediateInsulin);
+      if (extendedInsulin)  payload.extendedInsulin  = parseFloat(extendedInsulin);
+      if (absorptionTime)   payload.absorptionTime   = parseFloat(absorptionTime);
       if (cfg.rateMode)     payload.rateMode     = rateMode;
       if (cfg.exerciseType) payload.exerciseType = exerciseType;
       if (cfg.intensity)    payload.intensity    = intensity;
@@ -318,6 +351,65 @@ export function TreatmentModal({ onClose, onSuccess, initialValues }: Props) {
             </div>
           )}
 
+          {/* Imediata + Estendida — Combo Bolus */}
+          {(cfg.immediateInsulin || cfg.extendedInsulin) && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                {cfg.immediateInsulin && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="immediateInsulin">
+                      Imediata{cfg.immediateInsulinRequired && <span className="text-destructive ml-0.5">*</span>}
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="immediateInsulin"
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        placeholder="0"
+                        value={immediateInsulin}
+                        onChange={(e) => setImmediateInsulin(e.target.value)}
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">U</span>
+                    </div>
+                  </div>
+                )}
+                {cfg.extendedInsulin && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="extendedInsulin">
+                      Estendida{cfg.extendedInsulinRequired && <span className="text-destructive ml-0.5">*</span>}
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="extendedInsulin"
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        placeholder="0"
+                        value={extendedInsulin}
+                        onChange={(e) => setExtendedInsulin(e.target.value)}
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">U</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* Computed total + split */}
+              {immediateInsulin && extendedInsulin && (() => {
+                const imm = parseFloat(immediateInsulin) || 0;
+                const ext = parseFloat(extendedInsulin)  || 0;
+                const total = imm + ext;
+                const pct = total > 0 ? Math.round((imm / total) * 100) : 0;
+                return (
+                  <p className="text-xs text-muted-foreground">
+                    Total: <span className="font-medium text-foreground">{total.toFixed(1)} U</span>
+                    {' '}· {pct}% imediata / {100 - pct}% estendida
+                  </p>
+                );
+              })()}
+            </div>
+          )}
+
           {/* Insulina */}
           {cfg.insulin && (
             <div className="space-y-1.5">
@@ -360,28 +452,7 @@ export function TreatmentModal({ onClose, onSuccess, initialValues }: Props) {
             </div>
           )}
 
-          {/* Glicose */}
-          {cfg.glucose && (
-            <div className="space-y-1.5">
-              <Label htmlFor="glucose">
-                Glicose{cfg.glucoseRequired && <span className="text-destructive ml-0.5">*</span>}
-              </Label>
-              <div className="relative">
-                <Input
-                  id="glucose"
-                  type="number"
-                  min="0"
-                  step={unit === 'mmol' ? '0.1' : '1'}
-                  placeholder="0"
-                  value={glucose}
-                  onChange={(e) => setGlucose(e.target.value)}
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{ul}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Proteína e Gordura — linha dupla */}
+          {/* Proteína e Gordura — logo abaixo dos carbos */}
           {(cfg.protein || cfg.fat) && (
             <div className="grid grid-cols-2 gap-3">
               {cfg.protein && (
@@ -418,6 +489,47 @@ export function TreatmentModal({ onClose, onSuccess, initialValues }: Props) {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Absorção dos carboidratos */}
+          {cfg.absorptionTime && (
+            <div className="space-y-1.5">
+              <Label htmlFor="absorptionTime">Absorção dos carbos</Label>
+              <div className="relative">
+                <Input
+                  id="absorptionTime"
+                  type="number"
+                  min="0"
+                  step="15"
+                  placeholder="120"
+                  value={absorptionTime}
+                  onChange={(e) => setAbsorptionTime(e.target.value)}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">min</span>
+              </div>
+              <p className="text-xs text-muted-foreground">Tempo estimado de absorção (padrão 120 min)</p>
+            </div>
+          )}
+
+          {/* Glicose */}
+          {cfg.glucose && (
+            <div className="space-y-1.5">
+              <Label htmlFor="glucose">
+                Glicose{cfg.glucoseRequired && <span className="text-destructive ml-0.5">*</span>}
+              </Label>
+              <div className="relative">
+                <Input
+                  id="glucose"
+                  type="number"
+                  min="0"
+                  step={unit === 'mmol' ? '0.1' : '1'}
+                  placeholder="0"
+                  value={glucose}
+                  onChange={(e) => setGlucose(e.target.value)}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{ul}</span>
+              </div>
             </div>
           )}
 

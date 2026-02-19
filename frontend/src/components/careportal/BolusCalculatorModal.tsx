@@ -33,7 +33,7 @@ import { toDisplayUnit, fromDisplayUnit, unitLabel, formatGlucose } from '../../
 interface Props {
   onClose: () => void;
   onRegister: (
-    eventType: 'Meal Bolus' | 'Correction Bolus',
+    eventType: 'Meal Bolus' | 'Snack Bolus' | 'Correction Bolus',
     values: { insulin: string; carbs?: string; glucose?: string }
   ) => void;
 }
@@ -134,11 +134,12 @@ export function BolusCalculatorModal({ onClose, onRegister }: Props) {
     return n.toFixed(2);
   }
 
-  function handleRegister(eventType: 'Meal Bolus' | 'Correction Bolus') {
+  function handleRegister(eventType: 'Meal Bolus' | 'Snack Bolus' | 'Correction Bolus') {
     const glucoseMgdl = fromDisplayUnit(parseFloat(bgDisplay) || 0, unit);
+    const includesCarbs = eventType === 'Meal Bolus' || eventType === 'Snack Bolus';
     onRegister(eventType, {
       insulin: String(rounded),
-      carbs:   eventType === 'Meal Bolus' && carbs ? carbs : undefined,
+      carbs:   includesCarbs && carbs ? carbs : undefined,
       glucose: bgDisplay ? String(Math.round(glucoseMgdl)) : undefined,
     });
   }
@@ -393,6 +394,14 @@ export function BolusCalculatorModal({ onClose, onRegister }: Props) {
               disabled={rounded <= 0 && !carbs}
             >
               Registrar Meal Bolus
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => handleRegister('Snack Bolus')}
+              disabled={rounded <= 0 && !carbs}
+            >
+              Registrar Snack Bolus
             </Button>
             <Button
               variant="outline"

@@ -10,7 +10,6 @@ import { DEFAULT_DEVICE_AGE_THRESHOLDS } from '../lib/deviceAge';
 import type { DeviceAgeThresholds } from '../lib/deviceAge';
 
 export type Period = '1h' | '3h' | '6h' | '12h' | '24h' | '7d' | '14d' | '30d';
-export type ColorTheme = 'default' | 'dracula';
 
 export interface AlarmThresholds {
   veryLow:  number;  // mg/dL, default 54
@@ -26,7 +25,6 @@ const DEFAULT_THRESHOLDS: AlarmThresholds = {
 interface DashboardState {
   period: Period;
   darkMode: boolean;
-  colorTheme: ColorTheme;
   lastRefresh: number;
   alarmThresholds: AlarmThresholds;
   // Phase 4: user settings
@@ -46,7 +44,6 @@ interface DashboardState {
   setPeriod: (period: Period) => void;
   toggleDarkMode: () => void;
   setDarkMode: (dark: boolean) => void;
-  setColorTheme: (theme: ColorTheme) => void;
   triggerRefresh: () => void;
   setAlarmThresholds: (t: AlarmThresholds) => void;
   setUnit: (unit: GlucoseUnit) => void;
@@ -65,10 +62,8 @@ interface DashboardState {
   initFromServer: (settings: AppSettings) => void;
 }
 
-function applyThemeClasses(darkMode: boolean, colorTheme: ColorTheme) {
-  const html = document.documentElement;
-  darkMode          ? html.classList.add('dark')    : html.classList.remove('dark');
-  colorTheme === 'dracula' ? html.classList.add('dracula') : html.classList.remove('dracula');
+function applyThemeClasses(darkMode: boolean) {
+  darkMode ? document.documentElement.classList.add('dark') : document.documentElement.classList.remove('dark');
 }
 
 export const useDashboardStore = create<DashboardState>()(
@@ -76,7 +71,6 @@ export const useDashboardStore = create<DashboardState>()(
     (set) => ({
       period: '24h',
       darkMode: false,
-      colorTheme: 'default',
       lastRefresh: Date.now(),
       alarmThresholds: DEFAULT_THRESHOLDS,
       unit: 'mgdl',
@@ -98,20 +92,14 @@ export const useDashboardStore = create<DashboardState>()(
       toggleDarkMode: () =>
         set((state) => {
           const next = !state.darkMode;
-          applyThemeClasses(next, state.colorTheme);
+          applyThemeClasses(next);
           return { darkMode: next };
         }),
 
       setDarkMode: (dark) =>
-        set((state) => {
-          applyThemeClasses(dark, state.colorTheme);
+        set(() => {
+          applyThemeClasses(dark);
           return { darkMode: dark };
-        }),
-
-      setColorTheme: (colorTheme) =>
-        set((state) => {
-          applyThemeClasses(state.darkMode, colorTheme);
-          return { colorTheme };
         }),
 
       triggerRefresh: () => set({ lastRefresh: Date.now() }),
@@ -156,14 +144,12 @@ export const useDashboardStore = create<DashboardState>()(
         targetBGHigh: settings.targetBGHigh ?? state.targetBGHigh,
         rapidPenStep:       settings.rapidPenStep       ?? state.rapidPenStep,
         predictionsDefault: settings.predictionsDefault  ?? state.predictionsDefault,
-        colorTheme:   (settings.colorTheme as ColorTheme) ?? state.colorTheme,
       })),
     }),
     {
       name: 'nightscout-dashboard',
       partialize: (state: DashboardState) => ({
         darkMode:        state.darkMode,
-        colorTheme:      state.colorTheme,
         period:          state.period,
         alarmThresholds: state.alarmThresholds,
         unit:            state.unit,
@@ -189,10 +175,7 @@ const stored = localStorage.getItem('nightscout-dashboard');
 if (stored) {
   try {
     const parsed = JSON.parse(stored);
-    applyThemeClasses(
-      !!parsed?.state?.darkMode,
-      parsed?.state?.colorTheme ?? 'default'
-    );
+    applyThemeClasses(!!parsed?.state?.darkMode);
   } catch {
     // ignore parse errors
   }

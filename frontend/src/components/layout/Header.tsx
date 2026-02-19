@@ -11,29 +11,13 @@ import { useDashboardStore } from '../../stores/dashboardStore';
 import { TreatmentModal } from '../careportal/TreatmentModal';
 import { BolusCalculatorModal } from '../careportal/BolusCalculatorModal';
 import type { EventTypeValue } from '../careportal/TreatmentModal';
-import type { ColorTheme } from '../../stores/dashboardStore';
-
-// ── Theme button icon: vampiro para Dracula, sol/lua para padrão ──────────────
-function ThemeIcon({ darkMode, colorTheme }: { darkMode: boolean; colorTheme: ColorTheme }) {
-  if (colorTheme === 'dracula') {
-    return <span className="text-base leading-none select-none">🧛</span>;
-  }
-  return darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />;
-}
-
-function themeTitle(darkMode: boolean, colorTheme: ColorTheme): string {
-  if (colorTheme === 'default' && !darkMode) return 'Padrão Claro → Padrão Escuro';
-  if (colorTheme === 'default' && darkMode)  return 'Padrão Escuro → Dracula Claro';
-  if (colorTheme === 'dracula' && !darkMode) return 'Dracula Claro → Dracula Escuro';
-  return 'Dracula Escuro → Padrão Claro';
-}
 
 interface HeaderProps {
   lastUpdated?: Date | null;
 }
 
 export function Header({ lastUpdated }: HeaderProps) {
-  const { darkMode, colorTheme, cycleTheme } = useTheme();
+  const { darkMode, cycleTheme } = useTheme();
   const { triggerRefresh, patientName } = useDashboardStore();
   const location = useLocation();
   const navigate = useNavigate();
@@ -137,9 +121,9 @@ export function Header({ lastUpdated }: HeaderProps) {
               variant="ghost"
               size="icon"
               onClick={cycleTheme}
-              title={themeTitle(darkMode, colorTheme)}
+              title={darkMode ? 'Modo Escuro → Modo Claro' : 'Modo Claro → Modo Escuro'}
             >
-              <ThemeIcon darkMode={darkMode} colorTheme={colorTheme} />
+              {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
 
             {!isSubpage && (

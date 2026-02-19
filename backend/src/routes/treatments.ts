@@ -14,7 +14,9 @@ const router = Router();
 // Campos obrigatórios por tipo de evento
 const REQUIRED_FIELDS: Record<string, string[]> = {
   'Meal Bolus':        ['insulin', 'carbs'],
+  'Snack Bolus':       ['insulin', 'carbs'],
   'Correction Bolus':  ['insulin'],
+  'Combo Bolus':       ['immediateInsulin', 'extendedInsulin', 'duration'],
   'Carb Correction':   ['carbs'],
   'BG Check':          ['glucose'],
   'Note':              ['notes'],
@@ -70,7 +72,8 @@ router.post('/', async (req, res) => {
   try {
     const { eventType, created_at, timestamp, glucose, carbs, insulin,
             protein, fat, notes, units, glucoseType, enteredBy, duration,
-            rate, rateMode, exerciseType, intensity } = req.body;
+            rate, rateMode, exerciseType, intensity,
+            immediateInsulin, extendedInsulin, absorptionTime } = req.body;
 
     // Validar tipo de evento
     if (!eventType || !VALID_EVENT_TYPES.includes(eventType)) {
@@ -83,7 +86,7 @@ router.post('/', async (req, res) => {
 
     // Validar campos obrigatórios por tipo
     const required = REQUIRED_FIELDS[eventType] ?? [];
-    const bodyMap: Record<string, unknown> = { glucose, carbs, insulin, notes, rate, duration };
+    const bodyMap: Record<string, unknown> = { glucose, carbs, insulin, notes, rate, duration, immediateInsulin, extendedInsulin };
     const missing = required.filter((f) => bodyMap[f] == null || bodyMap[f] === '');
     if (missing.length > 0) {
       return res.status(400).json({
@@ -111,8 +114,15 @@ router.post('/', async (req, res) => {
     if (rateMode     != null) doc.rateMode     = String(rateMode);
     if (notes        != null) doc.notes        = String(notes);
     if (units        != null) doc.units        = units;
-    if (exerciseType != null) doc.exerciseType = String(exerciseType);
-    if (intensity    != null) doc.intensity    = String(intensity);
+    if (exerciseType     != null) doc.exerciseType     = String(exerciseType);
+    if (intensity        != null) doc.intensity        = String(intensity);
+    if (immediateInsulin != null) doc.immediateInsulin = Number(immediateInsulin);
+    if (extendedInsulin  != null) doc.extendedInsulin  = Number(extendedInsulin);
+    if (absorptionTime   != null) doc.absorptionTime   = Number(absorptionTime);
+    // Combo Bolus: set insulin = total for display/reporting
+    if (eventType === 'Combo Bolus' && immediateInsulin != null && extendedInsulin != null) {
+      doc.insulin = Number(immediateInsulin) + Number(extendedInsulin);
+    }
 
     const treatment = await createTreatment(doc as any);
 

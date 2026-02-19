@@ -223,7 +223,6 @@ export interface AppSettings {
   targetBGHigh?: number;    // Target blood glucose high end mg/dL
   rapidPenStep?:       0.5 | 1;  // Rapid pen dosing increment in U
   predictionsDefault?: boolean;   // AR2 prediction enabled by default on chart
-  colorTheme?:   string;    // UI color theme: 'default' | 'dracula'
 }
 
 export async function getSettings(): Promise<AppSettings | null> {
@@ -254,10 +253,13 @@ export interface Treatment {
   duration?: number;
   protein?: number;
   fat?: number;
-  rate?:         number;                    // U/h (absolute) or % (relative) — Temp Basal
-  rateMode?:     'absolute' | 'relative';  // Temp Basal rate mode
-  exerciseType?: string;                   // Exercise type (aeróbico, anaeróbico, misto)
-  intensity?:    string;                   // Exercise intensity (leve, moderada, intensa)
+  rate?:             number;                    // U/h (absolute) or % (relative) — Temp Basal
+  rateMode?:         'absolute' | 'relative';  // Temp Basal rate mode
+  exerciseType?:     string;                   // Exercise type (aeróbico, anaeróbico, misto)
+  intensity?:        string;                   // Exercise intensity (leve, moderada, intensa)
+  immediateInsulin?: number;                   // Combo Bolus: immediate component in U
+  extendedInsulin?:  number;                   // Combo Bolus: extended component in U
+  absorptionTime?:   number;                   // Carb absorption time in minutes (for COB)
 }
 
 export async function getTreatments(params?: {
