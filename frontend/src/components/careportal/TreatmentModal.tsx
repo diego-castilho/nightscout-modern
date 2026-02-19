@@ -2,7 +2,8 @@
 // TreatmentModal — Formulário de registro de tratamento (Careportal)
 // Suporta: Meal Bolus, Correction Bolus, Carb Correction, BG Check, Note,
 //          Sensor Change, Site Change, Insulin Change,
-//          Basal Pen Change, Rapid Pen Change, Temp Basal, Exercise
+//          Basal Pen Change, Rapid Pen Change, Temp Basal, Exercise,
+//          Basal Insulin
 // ============================================================================
 
 import { useState } from 'react';
@@ -29,6 +30,7 @@ export const EVENT_TYPES = [
   { value: 'Basal Pen Change',  label: 'Nova Caneta Basal' },
   { value: 'Rapid Pen Change',  label: 'Nova Caneta Rápida' },
   { value: 'Exercise',          label: 'Exercício' },
+  { value: 'Basal Insulin',     label: 'Insulina Basal' },
 ] as const;
 
 export type EventTypeValue = typeof EVENT_TYPES[number]['value'];
@@ -68,6 +70,7 @@ const FIELD_CONFIG: Record<EventTypeValue, FieldConfig> = {
   'Basal Pen Change': { notes: true },
   'Rapid Pen Change': { penStep: true, notes: true },
   'Exercise':         { duration: true, durationRequired: true, exerciseType: true, intensity: true, notes: true },
+  'Basal Insulin':    { insulin: true, insulinRequired: true, notes: true },
 };
 
 // ---- Helpers ----------------------------------------------------------------

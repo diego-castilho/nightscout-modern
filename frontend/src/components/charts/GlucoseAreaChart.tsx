@@ -67,6 +67,7 @@ const TREATMENT_VISUAL: Record<string, { color: string; label: string; char: str
   'Rapid Pen Change': { color: '#fb7185', label: 'Caneta Rápida',       char: 'F' },
   'Temp Basal':       { color: '#8b5cf6', label: 'Basal Temporária',    char: 'T' },
   'Exercise':         { color: '#10b981', label: 'Exercício',           char: 'E' },
+  'Basal Insulin':    { color: '#6366f1', label: 'Insulina Basal',      char: 'X' },
 };
 
 // TIR zone colors (matching TIRChart)
