@@ -18,6 +18,7 @@ import type { AgeLevel, DeviceAge } from '../../lib/deviceAge';
 
 interface Props {
   latest: GlucoseEntry | null;
+  previous?: GlucoseEntry | null;
   loading: boolean;
 }
 
@@ -118,7 +119,7 @@ function AgePill({ deviceLabel, age }: AgePillProps) {
 
 // ── Main card ─────────────────────────────────────────────────────────────────
 
-export function CurrentGlucoseCard({ latest, loading }: Props) {
+export function CurrentGlucoseCard({ latest, previous, loading }: Props) {
   const { unit, alarmThresholds } = useDashboardStore();
   const iob = useIOB();
   const cob = useCOB();
@@ -155,11 +156,13 @@ export function CurrentGlucoseCard({ latest, loading }: Props) {
   const config = LEVEL_CONFIG[level];
   const trendArrow = getTrendArrow(latest.trend);
   const trendDesc = getTrendDescription(latest.trend);
-  const deltaText = latest.delta !== undefined
+  // Prefer delta computed from the two most recent readings; fall back to Nightscout's stored delta
+  const rawDeltaMgdl = previous
+    ? latest.sgv - previous.sgv
+    : latest.delta;
+  const deltaText = rawDeltaMgdl !== undefined
     ? (() => {
-        const d = unit === 'mmol'
-          ? (latest.delta / 18.01)
-          : latest.delta;
+        const d = unit === 'mmol' ? rawDeltaMgdl / 18.01 : rawDeltaMgdl;
         return `${d > 0 ? '+' : ''}${d.toFixed(unit === 'mmol' ? 2 : 1)} ${unitLabel(unit)}`;
       })()
     : null;

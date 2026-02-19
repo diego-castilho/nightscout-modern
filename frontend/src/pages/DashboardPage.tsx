@@ -143,7 +143,11 @@ export function DashboardPage() {
         )}
 
         {/* Current glucose - prominent */}
-        <CurrentGlucoseCard latest={latest} loading={loading} />
+        <CurrentGlucoseCard
+          latest={latest}
+          previous={entries.length >= 2 ? entries[entries.length - 2] : undefined}
+          loading={loading}
+        />
 
         {/* Main chart */}
         <GlucoseAreaChart entries={entries} loading={loading} />
