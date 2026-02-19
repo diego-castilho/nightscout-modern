@@ -32,8 +32,8 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   ZoomOut, X, Trash2,
-  Utensils, Syringe, Cookie, Droplets, FileText, Activity,
-  MapPin, FlaskConical, PenLine, Zap, Timer, Dumbbell, Moon,
+  Utensils, Syringe, Donut, Droplets, NotebookPen,
+  Disc, Gauge, TestTube, Dumbbell, CakeSlice,
   type LucideIcon,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -60,19 +60,20 @@ interface ChartPoint {
 // ── Treatment visual config ─────────────────────────────────────────────────
 
 const TREATMENT_VISUAL: Record<string, { color: string; label: string; icon: LucideIcon }> = {
-  'Meal Bolus':       { color: '#3b82f6', label: 'Refeição + Bolus',   icon: Utensils     },
-  'Correction Bolus': { color: '#8b5cf6', label: 'Bolus de Correção',  icon: Syringe      },
-  'Carb Correction':  { color: '#f97316', label: 'Correção de Carbos', icon: Cookie       },
-  'BG Check':         { color: '#14b8a6', label: 'Leitura de Glicose', icon: Droplets     },
-  'Note':             { color: '#64748b', label: 'Anotação',            icon: FileText     },
-  'Sensor Change':    { color: '#06b6d4', label: 'Troca de Sensor',     icon: Activity     },
-  'Site Change':      { color: '#22c55e', label: 'Troca de Site',       icon: MapPin       },
-  'Insulin Change':   { color: '#f59e0b', label: 'Troca de Insulina',   icon: FlaskConical },
-  'Basal Pen Change': { color: '#818cf8', label: 'Caneta Basal',        icon: PenLine      },
-  'Rapid Pen Change': { color: '#fb7185', label: 'Caneta Rápida',       icon: Zap          },
-  'Temp Basal':       { color: '#8b5cf6', label: 'Basal Temporária',    icon: Timer        },
-  'Exercise':         { color: '#10b981', label: 'Exercício',           icon: Dumbbell     },
-  'Basal Insulin':    { color: '#6366f1', label: 'Insulina Basal',      icon: Moon         },
+  'Meal Bolus':       { color: '#3b82f6', label: 'Refeição + Bolus',   icon: Utensils    },
+  'Snack Bolus':      { color: '#ec4899', label: 'Lanche + Bolus',     icon: CakeSlice   },
+  'Correction Bolus': { color: '#8b5cf6', label: 'Bolus de Correção',  icon: Syringe     },
+  'Carb Correction':  { color: '#f97316', label: 'Correção de Carbos', icon: Donut       },
+  'BG Check':         { color: '#14b8a6', label: 'Leitura de Glicose', icon: Droplets    },
+  'Note':             { color: '#64748b', label: 'Anotação',            icon: NotebookPen },
+  'Sensor Change':    { color: '#06b6d4', label: 'Troca de Sensor',     icon: Disc        },
+  'Site Change':      { color: '#22c55e', label: 'Troca de Site',       icon: Gauge       },
+  'Insulin Change':   { color: '#f59e0b', label: 'Troca de Insulina',   icon: TestTube    },
+  'Basal Pen Change': { color: '#818cf8', label: 'Caneta Basal',        icon: Syringe     },
+  'Rapid Pen Change': { color: '#fb7185', label: 'Caneta Rápida',       icon: Syringe     },
+  'Temp Basal':       { color: '#0ea5e9', label: 'Basal Temporária',    icon: Syringe     },
+  'Exercise':         { color: '#10b981', label: 'Exercício',           icon: Dumbbell    },
+  'Basal Insulin':    { color: '#6366f1', label: 'Insulina Basal',      icon: Syringe     },
 };
 
 // TIR zone colors (matching TIRChart)
@@ -262,23 +263,24 @@ function TreatmentLabel({ viewBox, treatment, isActive, onClick }: TreatmentLabe
   const cx = viewBox.x;
   const cy = viewBox.y + viewBox.height - 12; // 12px above bottom of plot area
   const Icon = cfg.icon;
-  const r = 9;
+  const size = 14; // ícone em px
 
   return (
     <g
       onClick={(e) => { e.stopPropagation(); onClick(treatment, cx, cy); }}
       style={{ cursor: 'pointer' }}
     >
-      <circle cx={cx} cy={cy} r={r}     fill="white"     opacity={0.75} />
-      <circle cx={cx} cy={cy} r={r - 1.5} fill={cfg.color} opacity={isActive ? 1 : 0.92} />
-      {isActive && <circle cx={cx} cy={cy} r={r} fill="none" stroke={cfg.color} strokeWidth={1.5} opacity={0.6} />}
-      <foreignObject x={cx - r + 2} y={cy - r + 2} width={(r - 2) * 2} height={(r - 2) * 2} style={{ pointerEvents: 'none' }}>
+      {/* Halo branco sutil para legibilidade sobre o fundo do gráfico */}
+      <circle cx={cx} cy={cy} r={size / 2 + 2} fill="white" opacity={0.55} />
+      {/* Anel de destaque quando ativo */}
+      {isActive && <circle cx={cx} cy={cy} r={size / 2 + 3} fill="none" stroke={cfg.color} strokeWidth={1.5} opacity={0.7} />}
+      <foreignObject x={cx - size / 2} y={cy - size / 2} width={size} height={size} style={{ pointerEvents: 'none', overflow: 'visible' }}>
         <div
           // @ts-expect-error — xmlns required for SVG foreignObject
           xmlns="http://www.w3.org/1999/xhtml"
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}
         >
-          <Icon size={9} color="white" strokeWidth={2.5} />
+          <Icon size={size} color={cfg.color} strokeWidth={2} />
         </div>
       </foreignObject>
     </g>
@@ -728,13 +730,8 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
               {visibleTreatments.length > 0 && Object.entries(TREATMENT_VISUAL)
                 .filter(([type]) => visibleEventTypes.includes(type))
                 .map(([type, { color, label, icon: Icon }]) => (
-                  <div key={type} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                    <span
-                      className="inline-flex items-center justify-center rounded-full shrink-0"
-                      style={{ backgroundColor: color, width: 15, height: 15 }}
-                    >
-                      <Icon size={8} color="white" strokeWidth={2.5} />
-                    </span>
+                  <div key={type} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    <Icon size={11} color={color} strokeWidth={2} className="shrink-0" />
                     {label}
                   </div>
                 ))}
