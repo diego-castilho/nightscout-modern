@@ -135,14 +135,18 @@ export async function deleteTreatment(id: string): Promise<boolean> {
   const db = getDatabase();
   const collection = db.collection('treatments');
 
-  let objectId: ObjectId;
+  // Tentar primeiro como ObjectId (documentos criados por este app)
   try {
-    objectId = new ObjectId(id);
+    const objectId = new ObjectId(id);
+    const result = await collection.deleteOne({ _id: objectId });
+    if (result.deletedCount === 1) return true;
   } catch {
-    return false;
+    // id não é um ObjectId válido — continuar
   }
 
-  const result = await collection.deleteOne({ _id: objectId });
+  // Fallback: deletar por _id como string (documentos do NS original com UUID)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = await collection.deleteOne({ _id: id as any });
   return result.deletedCount === 1;
 }
 
