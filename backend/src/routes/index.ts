@@ -7,6 +7,8 @@ import glucoseRouter from './glucose.js';
 import analyticsRouter from './analytics.js';
 import settingsRouter from './settings.js';
 import treatmentsRouter from './treatments.js';
+import authRouter from './auth.js';
+import { authenticate } from '../middleware/authenticate.js';
 import { getDatabaseStats } from '../db/queries.js';
 
 const router = Router();
@@ -153,7 +155,13 @@ router.get('/debug/databases', async (_req, res) => {
   }
 });
 
-// Mount route modules
+// Public routes (no auth required)
+router.use('/auth', authRouter);
+
+// All routes below require a valid JWT
+router.use(authenticate);
+
+// Protected route modules
 router.use('/glucose', glucoseRouter);
 router.use('/analytics', analyticsRouter);
 router.use('/settings', settingsRouter);

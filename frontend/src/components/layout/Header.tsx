@@ -4,10 +4,11 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Moon, Sun, RefreshCw, Activity, Settings, ArrowLeft, Menu, BarChart2, Plus, Syringe, Calculator } from 'lucide-react';
+import { Moon, Sun, RefreshCw, Activity, Settings, ArrowLeft, Menu, BarChart2, Plus, Syringe, Calculator, LogOut } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useTheme } from '../../hooks/useTheme';
 import { useDashboardStore } from '../../stores/dashboardStore';
+import { useAuthStore } from '../../stores/authStore';
 import { TreatmentModal } from '../careportal/TreatmentModal';
 import { BolusCalculatorModal } from '../careportal/BolusCalculatorModal';
 import type { EventTypeValue } from '../careportal/TreatmentModal';
@@ -19,6 +20,7 @@ interface HeaderProps {
 export function Header({ lastUpdated }: HeaderProps) {
   const { darkMode, cycleTheme } = useTheme();
   const { triggerRefresh, patientName } = useDashboardStore();
+  const logout = useAuthStore((s) => s.logout);
   const location = useLocation();
   const navigate = useNavigate();
   const isSubpage = ['/settings', '/comparisons', '/treatments'].includes(location.pathname);
@@ -158,6 +160,14 @@ export function Header({ lastUpdated }: HeaderProps) {
                     >
                       <Settings className="h-4 w-4" />
                       Configurações
+                    </button>
+                    <div className="border-t border-border my-1" />
+                    <button
+                      onClick={() => { logout(); navigate('/login'); setMenuOpen(false); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors text-left text-destructive"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Sair
                     </button>
                   </div>
                 )}

@@ -29,11 +29,17 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor (for error handling)
+// Response interceptor — on 401, clear token and redirect to login
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.error('API Error:', error);
+    if (error?.response?.status === 401) {
+      // Avoid redirect loop when already on /login
+      if (!window.location.pathname.startsWith('/login')) {
+        localStorage.removeItem('authToken');
+        window.location.href = '/login';
+      }
+    }
     return Promise.reject(error);
   }
 );
@@ -279,6 +285,18 @@ export async function createTreatment(data: Omit<Treatment, '_id'>): Promise<Tre
 
 export async function deleteTreatment(id: string): Promise<void> {
   await api.delete(`/treatments/${id}`);
+}
+
+// ============================================================================
+// Auth Endpoints
+// ============================================================================
+
+export async function login(password: string): Promise<void> {
+  const response = await api.post<{ success: boolean; data: { token: string; expiresIn: string } }>(
+    '/auth/login',
+    { password }
+  );
+  localStorage.setItem('authToken', response.data.data.token);
 }
 
 export default api;

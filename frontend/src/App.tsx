@@ -10,25 +10,23 @@ import { useDashboardStore } from './stores/dashboardStore';
 import { getSettings } from './lib/api';
 
 import { Header } from './components/layout/Header';
+import { ProtectedRoute } from './components/ProtectedRoute';
+import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ComparisonsPage } from './pages/ComparisonsPage';
 import { TreatmentsPage } from './pages/TreatmentsPage';
 
-function App() {
-  // Initialize theme from persisted state
-  useTheme();
-
+// Inner layout: only rendered when authenticated
+function AuthenticatedLayout() {
   const { initFromServer } = useDashboardStore();
 
-  // Load settings from server on startup (shared across devices)
   useEffect(() => {
     getSettings()
       .then((settings) => { if (settings) initFromServer(settings); })
-      .catch(() => { /* Server unreachable — localStorage values remain */ });
+      .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // latest is needed by Header for "last updated" timestamp
   const { latest } = useGlucoseData();
   const lastUpdated = latest ? new Date(latest.date) : null;
 
@@ -42,6 +40,19 @@ function App() {
         <Route path="/treatments" element={<TreatmentsPage />} />
       </Routes>
     </div>
+  );
+}
+
+function App() {
+  useTheme();
+
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route element={<ProtectedRoute />}>
+        <Route path="/*" element={<AuthenticatedLayout />} />
+      </Route>
+    </Routes>
   );
 }
 
