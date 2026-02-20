@@ -2,7 +2,7 @@
 
 Interface moderna, responsiva e rica em recursos para monitoramento contínuo de glicose (CGM), construída sobre o banco de dados MongoDB do Nightscout existente.
 
-> **v0.5-beta** — Calculadora de Bolus aprimorada (inspirada no NS BWP), previsão AR2 com algoritmo idêntico ao Nightscout, delta com bucket averaging para leituras de 1 min (Libre), setas de tendência por string de direção e temas de cor (Dracula, Padrão, etc.).
+> **v0.6-beta** — Controle de acesso com autenticação JWT (senha única via `API_SECRET`), Combo Bolus, campo preBolus (Carb Time estilo NS), correção de alinhamento de gradiente TIR e início do roadmap de relatórios clínicos.
 
 ---
 
@@ -10,10 +10,20 @@ Interface moderna, responsiva e rica em recursos para monitoramento contínuo de
 
 ### Implementado ✅
 
+**Segurança & Autenticação**
+- Autenticação por senha única via variável de ambiente `API_SECRET`
+- JWT com expiração configurável (padrão 7 dias)
+- Rate limiting no login: 5 tentativas por 15 minutos por IP
+- Comparação timing-safe (proteção contra timing attacks)
+- Middleware Bearer token em todas as rotas protegidas
+- Tela de login dedicada com feedback de erro por tipo (401/429/rede)
+- Botão "Sair" no menu do header
+- Redirecionamento automático para `/login` em qualquer resposta 401
+
 **Backend**
 - Node.js 20 + Express + TypeScript
 - Acesso direto ao MongoDB do Nightscout (banco `nightscout`)
-- API REST completa (glucose, analytics, patterns, settings, treatments)
+- API REST completa (glucose, analytics, patterns, settings, treatments, auth)
 - Persistência de configurações no servidor (compartilhada entre dispositivos)
 - Analytics engine:
   - Estatísticas: média, mediana, desvio padrão, mín/máx
@@ -45,96 +55,70 @@ Interface moderna, responsiva e rica em recursos para monitoramento contínuo de
 
 | Gráfico | Descrição |
 |---------|-----------|
-| **Leituras de Glicose** | AreaChart com gradiente dinâmico por zona TIR. Zoom via drag horizontal, double-click para resetar. Eixo X e Y adaptam ao intervalo visível. Tooltip com valor, seta de tendência e horário. |
+| **Leituras de Glicose** | AreaChart com gradiente dinâmico por zona TIR. Gradiente de preenchimento e traçado calculados com bounding boxes corretos (fill: minVal→rawMax; stroke: rawMin→rawMax), garantindo alinhamento perfeito com as linhas de threshold. Zoom via drag horizontal, double-click para resetar. |
 | **Previsão AR2** | Extensão preditiva no gráfico principal. Algoritmo idêntico ao NS (`ar2.js`): espaço logarítmico, coeficientes [-0.723, 1.716], passos fixos de 5 min (cobertura ~60 min), médias em bucket para s0/s1, clamping [36, 400] mg/dL. |
-| **Marcadores de Tratamento** | Ícones sobre o gráfico de glicose indicando bolus de refeição (🍽️), correção (💉), insulina lenta (🔵), carboidratos (🌾), sensor/cateter/caneta novos (📌) e outros. Tooltip ao passar o mouse. |
-| **Tempo no Alvo (TIR)** | Barra empilhada (Muito Baixo → Muito Alto) + tabela com metas internacionais, tempo/dia real e indicadores ✓/✗. Ordem e cores refletem a progressão de risco. |
+| **Marcadores de Tratamento** | Ícones sobre o gráfico de glicose para todos os tipos de evento. Tooltip ao passar o mouse com todos os dados + botão de exclusão inline. |
+| **Tempo no Alvo (TIR)** | Barra empilhada (Muito Baixo → Muito Alto) + tabela com metas internacionais, tempo/dia real e indicadores ✓/✗. |
 | **Padrão Diário (AGP)** | Eixo fixo 00:00–23:00 (padrão clínico AGP). Bandas P5–P25–P75–P95 + mediana. Estatísticas inline: Média, GMI, CV%, % no Alvo com semáforo. |
 | **Comparação de Períodos** | Sobrepõe a média horária do período atual (verde) com o período anterior equivalente (cinza tracejado). Grade de estatísticas com delta arrows (↑↓→). Disponível para 24h/7d/14d/30d. Colapsável. |
-| **Cartão de Glicose Atual** | Valor em destaque com cor por zona, seta de tendência (mapeada do campo `direction` do NS — 12 direções), delta com bucket averaging estilo NS (correto para leituras de 1 min do Libre), badge de status, alerta de dados antigos. IOB e COB em tempo real. |
+| **Cartão de Glicose Atual** | Valor em destaque com cor por zona, seta de tendência (12 direções NS), delta com bucket averaging estilo NS, badge de status, IOB e COB em tempo real. |
 | **Grid de Estatísticas** | 4 cards: Média · GMI · A1c Estimada · CV% com semáforo verde/amarelo/vermelho. |
-| **Alertas de Padrões** | Cards de alerta para padrões detectados com severidade (baixa/média/alta). |
+| **Alertas de Padrões** | Cards para padrões detectados com severidade (baixa/média/alta). |
 
 **IOB & COB (Insulina e Carboidratos Ativos)**
 
 | Indicador | Descrição |
 |-----------|-----------|
-| **IOB** | Calcula a Insulina Ativa (Insulin on Board) a partir do histórico de bolus e da taxa basal programada. Usa modelo de ação biexponencial configurável via DIA (Duration of Insulin Action). Exibido no cartão de glicose atual. |
-| **COB** | Calcula os Carboidratos Ativos (Carbs on Board) aplicando taxa de absorção configurável (padrão 30 g/h). Exibido no cartão de glicose atual. |
+| **IOB** | Insulina Ativa calculada a partir do histórico de bolus. Modelo biexponencial configurável via DIA. |
+| **COB** | Carboidratos Ativos com taxa de absorção configurável (padrão 30 g/h). |
 
 **Careportal — Registro de Tratamentos**
 
 | Tipo de Evento | Campos |
 |----------------|--------|
-| Meal Bolus | Insulina (U) · Carboidratos (g) · Glicose (mg/dL) · Notas |
-| Correction Bolus | Insulina (U) · Glicose (mg/dL) · Notas |
-| Slow Bolus | Insulina (U) · Notas |
-| Slow Pen Change | Notas |
-| Rapid Pen Change | Notas · **Incremento de dose (1 U / 0,5 U)** |
-| Sensor Change | Notas |
-| Cannula Change | Notas |
-| Temp Basal | Taxa (U/h) · Duração (min) · Notas |
+| Meal Bolus | Insulina (U) · Carboidratos (g) · Proteína (g) · Gordura (g) · Glicose · Momento dos carbos (preBolus) · Notas |
+| Snack Bolus | Insulina (U) · Carboidratos (g) · Proteína (g) · Gordura (g) · Glicose · Momento dos carbos (preBolus) · Notas |
+| Correction Bolus | Insulina (U) · Glicose · Notas |
+| Combo Bolus | Insulina imediata (U) · Insulina estendida (U) · Duração (min) · Carboidratos (g) · Momento dos carbos · Notas |
 | Carb Correction | Carboidratos (g) · Notas |
-| Exercise | Notas |
+| BG Check | Glicose (mg/dL) · Notas |
+| Sensor Change | Notas |
+| Site Change | Notas |
+| Insulin Change | Notas |
+| Rapid Pen Change | Notas · Incremento de dose (1 U / 0,5 U) |
+| Slow Pen Change | Notas |
+| Temp Basal | Taxa (U/h ou %) · Modo (absoluto/relativo) · Duração (min) · Notas |
+| Exercise | Tipo · Intensidade · Duração (min) · Notas |
 | Note | Texto livre |
+| Basal Insulin | Insulina (U) · Notas |
+
+**Campo preBolus (Carb Time):** compatível com o campo homônimo do NS, registra o tempo dos carboidratos em relação ao bolus (−60 a +60 min). Disponível em Meal Bolus, Snack Bolus e Combo Bolus.
 
 **Calculadora de Bolus**
 
-Acessível pelo ícone de calculadora (🧮) no header. Algoritmo inspirado no Bolus Wizard Preview (BWP) do Nightscout. Calcula a dose sugerida com base em:
+Acessível pelo ícone de calculadora (🧮) no header. Algoritmo espelho do Bolus Wizard Preview (BWP) do Nightscout:
 
-- Glicose atual (preenchida automaticamente pelo sensor, editável)
-- Carboidratos da refeição
-- IOB atual (calculado automaticamente)
-- ISF, ICR e **faixa alvo** mín/máx (configuráveis globalmente e ajustáveis por-cálculo)
-- Carboidratos recentes (última hora — exibidos como contexto)
-
-**Fórmula (espelho do NS BWP):**
 ```
-Projetado = BG_atual − IOB × ISF        (glicose esperada após o IOB se esgotar)
-Correção  = 0                            se Projetado ∈ [AlvoMín, AlvoMáx]
-          = (Projetado − AlvoMáx) / ISF  se acima  (positivo → mais insulina)
-          = (Projetado − AlvoMín) / ISF  se abaixo (negativo → excesso de insulina)
+Projetado = BG_atual − IOB × ISF
+Correção  = (Projetado − AlvoMáx) / ISF  se acima do alvo
+          = (Projetado − AlvoMín) / ISF  se abaixo do alvo
+          = 0                            se dentro do alvo
 Carbos    = gramas / ICR
-Sugerido  = Carbos + Correção            (pode ser negativo)
+Sugerido  = Carbos + Correção
 Dose      = arredondar(max(0, Sugerido), passo da caneta)
 ```
 
-O breakdown detalhado é exibido em tempo real:
-
-```
-Glicose projetada (após IOB): 115 mg/dL
-Carbos:      +3,33 U
-Correção:    +0,00 U  (dentro do alvo 100–120)
-──────────────────────────────────────────
-Calculado:    3,33 U
-Dose (1 U):   3 U
-
-── Alternativa — Basal Temporária: ─────
-30 min:  60%
-1 hora:  80%
-```
-
-Quando o cálculo resulta em valor negativo (excesso de insulina ativa):
-```
-⚠️ Excesso de insulina ativa
-Equivalente a 8g de carboidratos para cobrir
-```
-
-Ao confirmar, abre o TreatmentModal pré-preenchido como **Meal Bolus** ou **Correction Bolus**.
+Quando resultado negativo: exibe equivalente em carboidratos e sugestões de basal temporária.
 
 **Idades de Dispositivos**
 
-Indicadores de idade exibidos no dashboard para:
-
-| Dispositivo | Limite Padrão | Cores |
-|-------------|--------------|-------|
-| SAGE (Sensor) | ≤ 10 dias OK · 11 dias atenção · 14 dias alerta |  🟢 🟡 🔴 |
-| CAGE (Cateter) | ≤ 2 dias OK · 3 dias atenção · 4 dias alerta | 🟢 🟡 🔴 |
-| IAGE (Insulina) | ≤ 28 dias OK · 29 dias atenção · 30+ dias alerta | 🟢 🟡 🔴 |
-| Caneta Rápida | ≤ 28 dias OK · 29 dias atenção · 30+ dias alerta | 🟢 🟡 🔴 |
-| Caneta Lenta | ≤ 28 dias OK · 29 dias atenção · 30+ dias alerta | 🟢 🟡 🔴 |
-
-Thresholds configuráveis na página de Configurações.
+| Dispositivo | Thresholds padrão |
+|-------------|------------------|
+| SAGE (Sensor) | ≤10 dias 🟢 · 11 dias 🟡 · 14 dias 🔴 |
+| CAGE (Cateter) | ≤2 dias 🟢 · 3 dias 🟡 · 4 dias 🔴 |
+| IAGE (Insulina) | ≤28 dias 🟢 · 29 dias 🟡 · 30+ dias 🔴 |
+| Caneta Rápida | ≤28 dias 🟢 · 29 dias 🟡 · 30+ dias 🔴 |
+| Caneta Lenta | ≤28 dias 🟢 · 29 dias 🟡 · 30+ dias 🔴 |
 
 **Configurações**
 
@@ -146,20 +130,33 @@ Thresholds configuráveis na página de Configurações.
 | Faixas limites | Thresholds de Muito Baixo / Baixo / Alto / Muito Alto |
 | DIA | Duration of Insulin Action em horas (cálculo de IOB) |
 | Taxa de absorção de carbos | g/hora para cálculo de COB (padrão 30 g/h) |
-| Taxa basal programada | U/h da bomba (0 = usuário de caneta / MDI) |
-| ISF | Insulin Sensitivity Factor — mg/dL por unidade (para calculadora) |
-| ICR | Insulin-to-Carb Ratio — gramas por unidade (para calculadora) |
-| Faixa Alvo (Mín/Máx) | Faixa-alvo para cálculo de correção — sem correção se glicose projetada dentro da faixa |
-| Passo da caneta rápida | Incremento da caneta: 1 U ou 0,5 U (arredondamento da dose) |
-| Preditivo AR2 padrão | Exibir linha de previsão AR2 ao abrir o gráfico (ligado/desligado) |
-| Idades de dispositivos | Thresholds de atenção/alerta para cada tipo de dispositivo |
+| Taxa basal programada | U/h da bomba (0 = MDI) |
+| ISF | Insulin Sensitivity Factor — mg/dL por unidade |
+| ICR | Insulin-to-Carb Ratio — gramas por unidade |
+| Faixa Alvo (Mín/Máx) | Faixa-alvo para cálculo de correção |
+| Passo da caneta rápida | 1 U ou 0,5 U |
+| Preditivo AR2 padrão | Exibir previsão AR2 por padrão |
+| Idades de dispositivos | Thresholds por tipo de dispositivo |
 
 ---
 
 ### Em Desenvolvimento 🚧
 
+**Relatórios Clínicos** (roadmap de 8 fases, análise comparativa com NS original e LibreView concluída):
+
+| Fase | Relatório | Status |
+|------|-----------|--------|
+| 1 | Calendário Mensal (heatmap glicemia média + eventos de hipo por dia) | 🔜 Próximo |
+| 2 | Resumo Semanal (sparklines diários + totais insulina/carbos) | Planejado |
+| 3 | Stats Horárias (box plots 00h–23h) | Planejado |
+| 4 | Distribuição Avançada (GVI, PGS, flutuação) | Planejado |
+| 5 | Log Diário detalhado (gráfico + grade numérica + anotações) | Planejado |
+| 6 | Padrões de Refeição (pré/pós-meal por período do dia) | Planejado |
+| 7 | AGP Imprimível / PDF (formato clínico ADA) | Planejado |
+| 8 | Spaghetti Semanal (7 curvas sobrepostas por dia da semana) | Planejado |
+
+**Outros:**
 - Alarmes sonoros / Push Notifications (PWA)
-- Relatório PDF estilo AGP
 - Integração Claude AI via MCP LibreLink
 
 ---
@@ -177,9 +174,10 @@ Thresholds configuráveis na página de Configurações.
 │  - PWA / Service Worker             │
 │  Nginx  →  http://<frontend-ip>      │
 └────────────┬────────────────────────┘
-             │ REST API
+             │ REST API (JWT Bearer)
 ┌────────────▼────────────────────────┐
 │  Backend (Node.js + Express)        │
+│  - Autenticação JWT                 │
 │  - API REST endpoints               │
 │  - Analytics engine                 │
 │  - CRUD de tratamentos              │
@@ -216,8 +214,8 @@ git clone https://github.com/diego-castilho/nightscout-modern.git
 cd nightscout-modern
 
 # 2. Configure as variáveis de ambiente
-cp backend/.env.example backend/.env
-# edite backend/.env com suas configurações
+cp .env.example .env
+# edite .env com suas configurações
 
 # 3. Build e start (com MacVLAN para IPs fixos na rede local)
 docker compose build
@@ -227,11 +225,18 @@ docker compose -f docker-compose.yml -f docker-compose.macvlan.yml up -d
 docker compose logs -f
 ```
 
-> **MacVLAN:** Se sua rede usa MacVLAN para atribuir IPs fixos aos containers,
-> use sempre o override `docker-compose.macvlan.yml` no comando `up`.
+> **MacVLAN:** Use sempre o override `docker-compose.macvlan.yml` no comando `up` para garantir IPs fixos na rede local e acesso ao MongoDB.
 
-**Acesso** (ajuste os IPs adequadamente para seu ambiente):
-- Frontend: `http://<frontend-ip>`
+**Variáveis de ambiente obrigatórias no `.env`:**
+```env
+MONGO_URI=mongodb://<mongo-ip>:27017/nightscout
+API_SECRET=sua_senha_aqui        # senha de acesso ao frontend
+JWT_SECRET=string_aleatoria      # segredo para assinatura JWT
+JWT_EXPIRES_IN=7d                # duração do token
+```
+
+**Acesso:**
+- Frontend: `http://<frontend-ip>` → redireciona para `/login`
 - Backend API: `http://<backend-ip>:3001/api`
 - Health check: `http://<backend-ip>:3001/api/health`
 
@@ -248,6 +253,14 @@ cd frontend && npm install && npm run dev
 ---
 
 ## API Endpoints
+
+### Autenticação (público)
+```
+POST /api/auth/login     — { password } → { token, expiresIn }
+```
+
+Rate limit: 5 tentativas por 15 minutos por IP.
+Todos os demais endpoints exigem header: `Authorization: Bearer <token>`
 
 ### Saúde e Stats
 ```
@@ -281,29 +294,9 @@ GET /api/settings        — Carregar configurações salvas
 PUT /api/settings        — Salvar configurações
 ```
 
-Campos suportados em `PUT /api/settings`:
-```json
-{
-  "unit": "mgdl",
-  "patientName": "Nome",
-  "refreshInterval": 5,
-  "alarmThresholds": { "veryLow": 54, "low": 70, "high": 180, "veryHigh": 250 },
-  "dia": 3,
-  "carbAbsorptionRate": 30,
-  "scheduledBasalRate": 0,
-  "isf": 50,
-  "icr": 15,
-  "targetBG": 100,
-  "targetBGHigh": 120,
-  "rapidPenStep": 1,
-  "predictionsDefault": false,
-  "deviceAgeThresholds": { ... }
-}
-```
-
 ### Tratamentos
 ```
-GET  /api/treatments        — Listar tratamentos (startDate, endDate, limit, skip, eventType)
+GET  /api/treatments        — Listar (startDate, endDate, limit, skip, eventType)
 POST /api/treatments        — Registrar novo tratamento
 DELETE /api/treatments/:id  — Excluir tratamento
 ```
@@ -314,19 +307,26 @@ Campos suportados em `POST /api/treatments`:
   "eventType": "Meal Bolus",
   "insulin": 3.5,
   "carbs": 45,
+  "protein": 10,
+  "fat": 15,
   "glucose": 140,
-  "duration": 0,
+  "preBolus": -15,
+  "immediateInsulin": 2.0,
+  "extendedInsulin": 1.5,
+  "duration": 120,
+  "rate": 0.8,
+  "rateMode": "absolute",
+  "exerciseType": "aeróbico",
+  "intensity": "moderada",
   "notes": "Almoço"
 }
 ```
 
-Tipos de evento aceitos: `Meal Bolus`, `Correction Bolus`, `Slow Bolus`, `Rapid Pen Change`, `Slow Pen Change`, `Sensor Change`, `Cannula Change`, `Temp Basal`, `Carb Correction`, `Exercise`, `Note`.
+Tipos de evento aceitos: `Meal Bolus`, `Snack Bolus`, `Correction Bolus`, `Combo Bolus`, `Carb Correction`, `BG Check`, `Sensor Change`, `Site Change`, `Insulin Change`, `Rapid Pen Change`, `Slow Pen Change`, `Temp Basal`, `Exercise`, `Note`, `Basal Insulin`.
 
 ---
 
 ## Zonas TIR (Time in Range)
-
-Os limiares abaixo são os padrões internacionais. Todos são configuráveis na página de Configurações.
 
 | Zona | Faixa padrão | Cor | Meta Internacional |
 |------|-------------|-----|-------------------|
@@ -335,6 +335,8 @@ Os limiares abaixo são os padrões internacionais. Todos são configuráveis na
 | **Alvo** | **70–180 mg/dL** | **Verde** | **> 70%** |
 | Baixo | 54–70 mg/dL | Laranja | < 4% |
 | Muito Baixo | < 54 mg/dL | Vermelho | < 1% |
+
+Todos os thresholds são configuráveis na página de Configurações.
 
 ---
 
@@ -347,6 +349,7 @@ Os limiares abaixo são os padrões internacionais. Todos são configuráveis na
 | Framework | Express.js |
 | Linguagem | TypeScript |
 | Banco de Dados | MongoDB (driver nativo) |
+| Autenticação | jsonwebtoken + express-rate-limit |
 | Validação | Zod |
 
 ### Frontend
@@ -357,7 +360,7 @@ Os limiares abaixo são os padrões internacionais. Todos são configuráveis na
 | Linguagem | TypeScript |
 | Estilos | Tailwind CSS + shadcn/ui |
 | Gráficos | Recharts 2 |
-| Estado Global | Zustand (com persist) |
+| Estado Global | Zustand |
 | HTTP | Axios |
 | Datas | date-fns (pt-BR) |
 | PWA | vite-plugin-pwa |
@@ -375,71 +378,43 @@ Os limiares abaixo são os padrões internacionais. Todos são configuráveis na
 ## Roadmap
 
 ### Fase 1 — Fundação ✅
-- Backend + API REST
-- MongoDB integration
-- Analytics engine
+- Backend + API REST + MongoDB integration + Analytics engine
 
 ### Fase 2 — Dashboard Core ✅
-- Gráfico de glicose (AreaChart com gradiente TIR)
-- Time in Range (barra + tabela)
-- Padrão Diário AGP (bandas de percentil)
-- Cards de métricas (Média, GMI, A1c, CV%)
-- Seletor de período (1h a 30d)
-- Dark mode persistido
-- PWA / Service Worker
-- Detecção de padrões (alertas)
-- Auto-refresh configurável
+- Gráfico de glicose (AreaChart com gradiente TIR), TIR, AGP, métricas, períodos, dark mode, PWA
 
 ### Fase 3 — Notificações ⚠️ (parcial)
-- Alertas visuais com banner (hipo/hiper) ✅
-- Thresholds configuráveis ✅
-- Alarmes sonoros / Push Notifications (pendente)
+- Alertas visuais ✅ · Alarmes sonoros / Push (pendente)
 
 ### Fase 4 — Configurações ✅
-- Página de settings completa
-- Suporte mg/dL e mmol/L com conversão em tempo real
-- Thresholds configuráveis (afetam todos os gráficos e cálculos TIR)
-- Nome do paciente exibido no header
-- Intervalo de auto-refresh configurável
-- Persistência no servidor (compartilhado entre dispositivos)
+- Settings completo, mg/dL / mmol/L, thresholds, persistência no servidor
 
 ### Fase 5 — UX Avançado ✅
-- Zoom/pan interativo no gráfico de glicose (drag + double-click reset)
-- AGP clínico com estatísticas inline (Média, GMI, CV%, TIR%)
-- Comparação de períodos (atual vs anterior, overlay AGP)
-- TIR reordenado de menor para maior risco
+- Zoom/pan, AGP clínico, comparação de períodos, TIR reordenado
 
 ### Fase 6 — Careportal & Calculadora ✅
-- Registro de tratamentos (Meal Bolus, Correction Bolus, Sensor/Cannula/Pen Change, Temp Basal, etc.)
-- Histórico de tratamentos com exclusão (`/treatments`)
-- Marcadores de tratamento sobrepostos no gráfico de glicose
-- IOB — Insulina Ativa em tempo real (modelo biexponencial, DIA configurável)
-- COB — Carboidratos Ativos em tempo real (taxa de absorção configurável)
-- IOB e COB exibidos no cartão de glicose atual
-- Previsão AR2 (algoritmo autoregressivo de ordem 2) no gráfico de glicose
-- Calculadora de Bolus com breakdown detalhado (ISF, ICR, alvo, arredondamento por passo de caneta)
-- Idades de dispositivos (SAGE, CAGE, IAGE, canetas) com alertas por thresholds configuráveis
-- Passo da caneta rápida (1 U / 0,5 U) registrado via careportal e usado na calculadora
-- Suporte a Temp Basal (taxa e duração) para usuários de bomba de insulina
+- Registro e histórico de tratamentos, marcadores no gráfico, IOB/COB, AR2, Calculadora de Bolus (BWP), idades de dispositivos, Temp Basal, Insulina Basal
 
 ### Fase 7 — Fidelidade ao Nightscout ✅
-- **Setas de tendência**: mapeadas do campo `direction` (string) — 12 direções idênticas ao NS (`FortyFiveUp`, `DoubleDown`, etc.)
-- **Delta com bucket averaging**: algoritmo NS `bgnow.js` aplicado no frontend — janelas de 5 min (correto para Libre com leituras de 1 min)
-- **AR2 idêntico ao NS** (`ar2.js`): espaço log, coef. [-0.723, 1.716], passos fixos 5 min, clamping [36, 400]
-- **Calculadora de Bolus aprimorada** (espelho do NS BWP):
-  - Faixa alvo (mín/máx) em vez de ponto único
-  - Glicose projetada (após IOB) exibida no breakdown
-  - Equivalente em carboidratos quando resultado é negativo
-  - Sugestões de basal temporária (30 min / 1 h) — apenas quando taxa basal configurada
-  - Carboidratos recentes da última hora exibidos como contexto
-- **Temas de cor**: Padrão, Dracula e outros — selecionáveis no header
+- Setas de tendência (12 direções), delta com bucket averaging, AR2 idêntico ao NS, Calculadora BWP com faixa alvo, temas Dracula/Padrão
 
-### Fase 9 — Relatórios (próximo)
-- PDF estilo AGP
-- Resumo semanal
-- Export CSV
+### Fase 8 — Careportal Avançado ✅
+- Combo Bolus (imediata + estendida + duração)
+- Proteína e gordura em Meal/Snack Bolus
+- Campo preBolus (Carb Time −60 a +60 min)
+- Alinhamento correto do gradiente TIR com linhas de threshold (bounding boxes separadas fill/stroke)
+- Tipos adicionais: BG Check, Exercise (tipo + intensidade), Basal Insulin
 
-### Fase 10 — Integrações
+### Fase 9 — Segurança ✅
+- Autenticação JWT com senha única (API_SECRET)
+- Rate limiting no login (5 tentativas / 15 min)
+- Middleware de proteção em todas as rotas
+- Tela de login + botão Sair
+
+### Fase 10 — Relatórios Clínicos 🔜
+- Calendário Mensal (heatmap) → Resumo Semanal → Stats Horárias → Distribuição Avançada → Log Diário → Padrões de Refeição → AGP Imprimível → Spaghetti Semanal
+
+### Fase 11 — Integrações
 - Claude AI via MCP LibreLink
 - Dados de loop (AndroidAPS / Loop)
 
