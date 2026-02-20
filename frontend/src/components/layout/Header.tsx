@@ -128,8 +128,7 @@ export function Header({ lastUpdated }: HeaderProps) {
               {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
 
-            {!isSubpage && (
-              <div className="relative" ref={menuRef}>
+            <div className="relative" ref={menuRef}>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -235,7 +234,6 @@ export function Header({ lastUpdated }: HeaderProps) {
                   </div>
                 )}
               </div>
-            )}
           </div>
         </div>
       </header>
