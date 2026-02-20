@@ -66,16 +66,21 @@ function minuteToLabel(min: number): string {
 // ============================================================================
 
 interface SpaghettiTooltipProps {
-  active?:   boolean;
-  payload?:  any[];
-  label?:    number;
-  unit:      'mgdl' | 'mmol';
-  dayLabels: string[];
+  active?:    boolean;
+  payload?:   any[];
+  label?:     number;
+  unit:       'mgdl' | 'mmol';
+  dayLabels:  string[];
+  hiddenDays: Set<number>;
 }
 
-function SpaghettiTooltip({ active, payload, label, unit, dayLabels }: SpaghettiTooltipProps) {
+function SpaghettiTooltip({ active, payload, label, unit, dayLabels, hiddenDays }: SpaghettiTooltipProps) {
   if (!active || !payload?.length || label === undefined) return null;
-  const valid = payload.filter((p) => p.value !== undefined && p.value !== null);
+  const valid = payload.filter((p) => {
+    if (p.value === undefined || p.value === null) return false;
+    const idx = parseInt(p.dataKey.replace('day', ''), 10);
+    return !hiddenDays.has(idx);
+  });
   if (valid.length === 0) return null;
   const h = Math.floor(label / 60);
   const m = label % 60;
@@ -113,13 +118,15 @@ interface DayStat {
 }
 
 interface DayStatsTableProps {
-  stats: DayStat[];
-  unit:  'mgdl' | 'mmol';
-  low:   number;
-  high:  number;
+  stats:      DayStat[];
+  unit:       'mgdl' | 'mmol';
+  low:        number;
+  high:       number;
+  hiddenDays: Set<number>;
+  onToggle:   (i: number) => void;
 }
 
-function DayStatsTable({ stats, unit, low, high }: DayStatsTableProps) {
+function DayStatsTable({ stats, unit, low, high, hiddenDays, onToggle }: DayStatsTableProps) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm border-collapse">
@@ -136,14 +143,24 @@ function DayStatsTable({ stats, unit, low, high }: DayStatsTableProps) {
         </thead>
         <tbody>
           {stats.map((s, i) => {
+            const hidden = hiddenDays.has(i);
             const f = (v: number) => `${formatGlucose(v, unit)} ${unitLabel(unit)}`;
             return (
-              <tr key={i} className="border-b border-border/50 hover:bg-muted/30">
+              <tr
+                key={i}
+                className={`border-b border-border/50 hover:bg-muted/30 transition-opacity ${hidden ? 'opacity-35' : ''}`}
+              >
                 <td className="py-1.5 pr-3">
                   <div className="flex items-center gap-2">
-                    <span
-                      className="inline-block w-3 h-3 rounded-full flex-shrink-0"
-                      style={{ background: s.color }}
+                    <button
+                      type="button"
+                      title={hidden ? 'Mostrar dia' : 'Ocultar dia'}
+                      onClick={() => onToggle(i)}
+                      className="inline-block w-3 h-3 rounded-full flex-shrink-0 cursor-pointer ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      style={{
+                        background:  hidden ? 'transparent' : s.color,
+                        border:      `2px solid ${s.color}`,
+                      }}
                     />
                     <span className="font-medium">
                       {format(s.date, 'EEE dd/MM', { locale: ptBR })}
@@ -198,6 +215,17 @@ export function SpaghettiPage() {
   const [entries, setEntries]       = useState<GlucoseEntry[]>([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState<string | null>(null);
+  const [hiddenDays, setHiddenDays] = useState<Set<number>>(new Set());
+
+  // Reset hidden state when period or offset changes
+  useEffect(() => { setHiddenDays(new Set()); }, [periodDays, offset]);
+
+  const toggleDay = (i: number) =>
+    setHiddenDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i); else next.add(i);
+      return next;
+    });
 
   // Date range ─ endDate uses 'now' so today's partial data is included
   const endDate = useMemo(() => {
@@ -379,7 +407,7 @@ export function SpaghettiPage() {
             <CardTitle className="text-sm">
               Perfis glicêmicos sobrepostos — 24 horas
               <span className="ml-2 text-xs font-normal text-muted-foreground">
-                cada linha representa um dia
+                clique na legenda ou na bolinha da tabela para ocultar/mostrar um dia
               </span>
             </CardTitle>
           </CardHeader>
@@ -424,7 +452,12 @@ export function SpaghettiPage() {
                     />
                     <Tooltip
                       content={(props) => (
-                        <SpaghettiTooltip {...props} unit={unit} dayLabels={dayLabels} />
+                        <SpaghettiTooltip
+                          {...props}
+                          unit={unit}
+                          dayLabels={dayLabels}
+                          hiddenDays={hiddenDays}
+                        />
                       )}
                     />
                     <ReferenceLine
@@ -461,25 +494,36 @@ export function SpaghettiPage() {
                         dot={false}
                         connectNulls={false}
                         isAnimationActive={false}
+                        hide={hiddenDays.has(i)}
                         name={dayLabels[i]}
                       />
                     ))}
                   </LineChart>
                 </ResponsiveContainer>
 
-                {/* Compact legend */}
+                {/* Compact clickable legend */}
                 <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs mt-3">
-                  {days.map((day, i) => (
-                    <span key={i} className="flex items-center gap-1.5">
-                      <span
-                        className="inline-block w-6 border-t-2 flex-shrink-0"
-                        style={{ borderColor: SPAGHETTI_COLORS[i % SPAGHETTI_COLORS.length] }}
-                      />
-                      <span className="text-muted-foreground">
-                        {format(day, 'EEE dd/MM', { locale: ptBR })}
-                      </span>
-                    </span>
-                  ))}
+                  {days.map((day, i) => {
+                    const hidden = hiddenDays.has(i);
+                    const color  = SPAGHETTI_COLORS[i % SPAGHETTI_COLORS.length];
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => toggleDay(i)}
+                        title={hidden ? 'Mostrar dia' : 'Ocultar dia'}
+                        className={`flex items-center gap-1.5 cursor-pointer rounded transition-opacity hover:opacity-80 ${hidden ? 'opacity-35' : ''}`}
+                      >
+                        <span
+                          className="inline-block w-6 border-t-2 flex-shrink-0 transition-colors"
+                          style={{ borderColor: hidden ? 'hsl(var(--muted-foreground))' : color }}
+                        />
+                        <span className="text-muted-foreground">
+                          {format(day, 'EEE dd/MM', { locale: ptBR })}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </>
             )}
@@ -494,7 +538,14 @@ export function SpaghettiPage() {
             <CardTitle className="text-sm">Estatísticas por dia</CardTitle>
           </CardHeader>
           <CardContent>
-            <DayStatsTable stats={dayStats} unit={unit} low={low} high={high} />
+            <DayStatsTable
+              stats={dayStats}
+              unit={unit}
+              low={low}
+              high={high}
+              hiddenDays={hiddenDays}
+              onToggle={toggleDay}
+            />
           </CardContent>
         </Card>
       )}
