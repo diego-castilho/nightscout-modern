@@ -288,6 +288,40 @@ export async function deleteTreatment(id: string): Promise<void> {
 }
 
 // ============================================================================
+// Calendar Endpoint
+// ============================================================================
+
+export interface CalendarDayData {
+  date: string;        // "YYYY-MM-DD"
+  avgGlucose: number;  // mg/dL
+  minGlucose: number;
+  maxGlucose: number;
+  readings: number;
+  hypoCount: number;
+  hypoSevere: number;
+  zone: 'veryLow' | 'low' | 'inRange' | 'high' | 'veryHigh' | 'noData';
+}
+
+export async function getCalendarData(
+  startDate: string,
+  endDate: string,
+  thresholds?: { veryLow?: number; low?: number; high?: number; veryHigh?: number }
+): Promise<CalendarDayData[]> {
+  const params: Record<string, string | number> = { startDate, endDate };
+  if (thresholds) {
+    if (thresholds.veryLow  !== undefined) params.veryLow  = thresholds.veryLow;
+    if (thresholds.low      !== undefined) params.low      = thresholds.low;
+    if (thresholds.high     !== undefined) params.high     = thresholds.high;
+    if (thresholds.veryHigh !== undefined) params.veryHigh = thresholds.veryHigh;
+  }
+  const response = await api.get<{ success: boolean; data: CalendarDayData[] }>('/analytics/calendar', {
+    params,
+    timeout: 30_000,
+  });
+  return response.data.data;
+}
+
+// ============================================================================
 // Auth Endpoints
 // ============================================================================
 

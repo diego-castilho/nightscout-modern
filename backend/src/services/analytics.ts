@@ -223,6 +223,87 @@ export function generateAnalytics(
 }
 
 // ============================================================================
+// Calendar Data (Monthly View)
+// ============================================================================
+
+export interface CalendarDayData {
+  date: string;        // "YYYY-MM-DD"
+  avgGlucose: number;  // mg/dL arredondado
+  minGlucose: number;
+  maxGlucose: number;
+  readings: number;
+  hypoCount: number;   // leituras < thresholds.low
+  hypoSevere: number;  // leituras < thresholds.veryLow
+  zone: 'veryLow' | 'low' | 'inRange' | 'high' | 'veryHigh' | 'noData';
+}
+
+function glucoseZone(
+  avg: number,
+  thresholds: Required<TIRThresholds>
+): CalendarDayData['zone'] {
+  if (avg < thresholds.veryLow) return 'veryLow';
+  if (avg < thresholds.low)     return 'low';
+  if (avg <= thresholds.high)   return 'inRange';
+  if (avg <= thresholds.veryHigh) return 'high';
+  return 'veryHigh';
+}
+
+export function calculateCalendarData(
+  entries: GlucoseEntry[],
+  startDate: Date,
+  thresholds: TIRThresholds = {}
+): CalendarDayData[] {
+  const tVeryLow  = thresholds.veryLow  ?? 54;
+  const tLow      = thresholds.low      ?? 70;
+  const tHigh     = thresholds.high     ?? 180;
+  const tVeryHigh = thresholds.veryHigh ?? 250;
+  const t: Required<TIRThresholds> = { veryLow: tVeryLow, low: tLow, high: tHigh, veryHigh: tVeryHigh };
+
+  // Agrupar por dayIndex relativo ao startDate (timezone-safe)
+  const byDay = new Map<number, number[]>();
+  for (const entry of entries) {
+    const dayIndex = Math.floor((entry.date - startDate.getTime()) / 86_400_000);
+    if (dayIndex < 0) continue;
+    if (!byDay.has(dayIndex)) byDay.set(dayIndex, []);
+    byDay.get(dayIndex)!.push(entry.sgv);
+  }
+
+  const days = byDay.size > 0 ? Math.max(...byDay.keys()) + 1 : 0;
+  const result: CalendarDayData[] = [];
+
+  for (let i = 0; i < days; i++) {
+    const values = byDay.get(i);
+    const dateStr = new Date(startDate.getTime() + i * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+
+    if (!values || values.length === 0) {
+      result.push({ date: dateStr, avgGlucose: 0, minGlucose: 0, maxGlucose: 0, readings: 0, hypoCount: 0, hypoSevere: 0, zone: 'noData' });
+      continue;
+    }
+
+    const avg  = Math.round(calculateMean(values));
+    const min  = Math.min(...values);
+    const max  = Math.max(...values);
+    const hypo = values.filter(v => v < tLow).length;
+    const sev  = values.filter(v => v < tVeryLow).length;
+
+    result.push({
+      date: dateStr,
+      avgGlucose: avg,
+      minGlucose: min,
+      maxGlucose: max,
+      readings: values.length,
+      hypoCount: hypo,
+      hypoSevere: sev,
+      zone: glucoseZone(avg, t),
+    });
+  }
+
+  return result;
+}
+
+// ============================================================================
 // Pattern Detection (Advanced Analysis)
 // ============================================================================
 

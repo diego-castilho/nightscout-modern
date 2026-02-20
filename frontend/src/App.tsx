@@ -16,6 +16,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ComparisonsPage } from './pages/ComparisonsPage';
 import { TreatmentsPage } from './pages/TreatmentsPage';
+import { CalendarPage } from './pages/CalendarPage';
 
 // Inner layout: only rendered when authenticated
 function AuthenticatedLayout() {
@@ -38,6 +39,7 @@ function AuthenticatedLayout() {
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/comparisons" element={<ComparisonsPage />} />
         <Route path="/treatments" element={<TreatmentsPage />} />
+        <Route path="/calendar" element={<CalendarPage />} />
       </Routes>
     </div>
   );
