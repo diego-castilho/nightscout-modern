@@ -183,8 +183,11 @@ export function calculateDailyPatterns(entries: GlucoseEntry[]): DailyPattern[] 
     patterns.push({
       hour,
       averageGlucose: values.length > 0 ? Math.round(calculateMean(values)) : 0,
+      median: values.length > 0 ? calculatePercentile(sorted, 50) : 0,
       count: values.length,
       stdDev: values.length > 0 ? Math.round(calculateStdDev(values)) : 0,
+      min: sorted.length > 0 ? sorted[0] : 0,
+      max: sorted.length > 0 ? sorted[sorted.length - 1] : 0,
       p5: calculatePercentile(sorted, 5),
       p25: calculatePercentile(sorted, 25),
       p75: calculatePercentile(sorted, 75),

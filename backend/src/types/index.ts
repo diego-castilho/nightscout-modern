@@ -121,12 +121,15 @@ export interface TimeInRange {
 export interface DailyPattern {
   hour: number;
   averageGlucose: number;
+  median: number;   // 50th percentile
   count: number;
   stdDev: number;
-  p5: number;   // 5th percentile
-  p25: number;  // 25th percentile
-  p75: number;  // 75th percentile
-  p95: number;  // 95th percentile
+  min: number;      // absolute minimum
+  max: number;      // absolute maximum
+  p5: number;       // 5th percentile
+  p25: number;      // 25th percentile
+  p75: number;      // 75th percentile
+  p95: number;      // 95th percentile
 }
 
 export interface GlucoseAnalytics {

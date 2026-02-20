@@ -112,8 +112,11 @@ export interface TimeInRange {
 export interface DailyPattern {
   hour: number;
   averageGlucose: number;
+  median: number;
   count: number;
   stdDev: number;
+  min: number;
+  max: number;
   p5: number;
   p25: number;
   p75: number;

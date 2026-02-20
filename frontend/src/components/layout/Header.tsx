@@ -4,7 +4,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Moon, Sun, RefreshCw, Activity, Settings, ArrowLeft, Menu, BarChart2, Plus, Syringe, Calculator, LogOut, CalendarDays, CalendarRange } from 'lucide-react';
+import { Moon, Sun, RefreshCw, Activity, Settings, ArrowLeft, Menu, BarChart2, Plus, Syringe, Calculator, LogOut, CalendarDays, CalendarRange, Clock } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useTheme } from '../../hooks/useTheme';
 import { useDashboardStore } from '../../stores/dashboardStore';
@@ -23,7 +23,7 @@ export function Header({ lastUpdated }: HeaderProps) {
   const logout = useAuthStore((s) => s.logout);
   const location = useLocation();
   const navigate = useNavigate();
-  const isSubpage = ['/settings', '/comparisons', '/treatments', '/calendar', '/weekly'].includes(location.pathname);
+  const isSubpage = ['/settings', '/comparisons', '/treatments', '/calendar', '/weekly', '/hourly'].includes(location.pathname);
 
   const [menuOpen,  setMenuOpen]  = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -160,6 +160,13 @@ export function Header({ lastUpdated }: HeaderProps) {
                     >
                       <CalendarRange className="h-4 w-4" />
                       Resumo Semanal
+                    </button>
+                    <button
+                      onClick={() => { navigate('/hourly'); setMenuOpen(false); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors text-left"
+                    >
+                      <Clock className="h-4 w-4" />
+                      Stats Horárias
                     </button>
                     <button
                       onClick={() => { navigate('/comparisons'); setMenuOpen(false); }}
