@@ -22,6 +22,7 @@ import { HourlyStatsPage } from './pages/HourlyStatsPage';
 import { DistributionPage } from './pages/DistributionPage';
 import { DailyLogPage } from './pages/DailyLogPage';
 import { MealPatternsPage } from './pages/MealPatternsPage';
+import { AGPPage } from './pages/AGPPage';
 
 // Inner layout: only rendered when authenticated
 function AuthenticatedLayout() {
@@ -50,6 +51,7 @@ function AuthenticatedLayout() {
         <Route path="/distribution" element={<DistributionPage />} />
         <Route path="/daily" element={<DailyLogPage />} />
         <Route path="/meals" element={<MealPatternsPage />} />
+        <Route path="/agp" element={<AGPPage />} />
       </Routes>
     </div>
   );
