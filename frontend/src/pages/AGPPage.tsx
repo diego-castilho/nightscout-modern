@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { format, subDays, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Printer, FileText } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import {
   ComposedChart,
   Area,
@@ -398,16 +398,6 @@ export function AGPPage() {
               </Button>
             ))}
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="ml-auto"
-            onClick={() => window.print()}
-            disabled={loading || !!error}
-          >
-            <Printer className="h-4 w-4 mr-2" />
-            Imprimir / PDF
-          </Button>
         </div>
 
         {/* Loading */}
