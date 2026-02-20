@@ -325,6 +325,44 @@ export async function getCalendarData(
 }
 
 // ============================================================================
+// Distribution / Advanced Variability Metrics
+// ============================================================================
+
+export interface HistogramBin {
+  bin: number;
+  count: number;
+  percent: number;
+}
+
+export interface DistributionStats {
+  totalReadings: number;
+  gvi: number;
+  pgs: number;
+  jIndex: number;
+  iqr: number;
+  meanDailyChange: number;
+  outOfRangeRms: number;
+  timeInFluctuation: number;
+  timeInRapidFluctuation: number;
+  histogram: HistogramBin[];
+}
+
+export async function getDistributionStats(
+  startDate: string,
+  endDate: string,
+  thresholds?: { low?: number; high?: number }
+): Promise<DistributionStats> {
+  const params: Record<string, string | number> = { startDate, endDate };
+  if (thresholds?.low  !== undefined) params.low  = thresholds.low;
+  if (thresholds?.high !== undefined) params.high = thresholds.high;
+  const response = await api.get<{ success: boolean; data: DistributionStats }>(
+    '/analytics/distribution',
+    { params, timeout: 45_000 }
+  );
+  return response.data.data;
+}
+
+// ============================================================================
 // Auth Endpoints
 // ============================================================================
 

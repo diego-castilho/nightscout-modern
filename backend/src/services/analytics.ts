@@ -307,6 +307,159 @@ export function calculateCalendarData(
 }
 
 // ============================================================================
+// Distribution & Advanced Variability Metrics (Fase 4)
+// ============================================================================
+
+export interface HistogramBin {
+  bin: number;     // lower bound in mg/dL (e.g. 40, 50, 60, …)
+  count: number;
+  percent: number; // 0–100
+}
+
+export interface DistributionStats {
+  totalReadings: number;
+  gvi: number;                   // Glycemic Variability Index
+  pgs: number;                   // Patient Glycemic Status
+  jIndex: number;                // J-Index = 0.001 × (mean + stdDev)²
+  iqr: number;                   // Interquartile Range (P75 - P25) mg/dL
+  meanDailyChange: number;       // Mean |daily_avg[i] - daily_avg[i-1]| mg/dL
+  outOfRangeRms: number;         // RMS distance from boundary for OOR readings
+  timeInFluctuation: number;     // % intervals |Δg/Δt| > 1 mg/dL/min
+  timeInRapidFluctuation: number;// % intervals |Δg/Δt| > 2 mg/dL/min
+  histogram: HistogramBin[];
+}
+
+export function calculateDistributionStats(
+  entries: GlucoseEntry[],
+  thresholds: TIRThresholds = {}
+): DistributionStats {
+  const tLow  = thresholds.low  ?? 70;
+  const tHigh = thresholds.high ?? 180;
+  const total = entries.length;
+
+  const empty: DistributionStats = {
+    totalReadings: 0, gvi: 0, pgs: 0, jIndex: 0, iqr: 0,
+    meanDailyChange: 0, outOfRangeRms: 0,
+    timeInFluctuation: 0, timeInRapidFluctuation: 0, histogram: [],
+  };
+  if (total === 0) return empty;
+
+  // Sort by timestamp ascending
+  const sorted = [...entries].sort((a, b) => a.date - b.date);
+  const values = sorted.map((e) => e.sgv);
+  const sortedVals = [...values].sort((a, b) => a - b);
+
+  // Basic stats
+  const mean   = calculateMean(values);
+  const stdDev = calculateStdDev(values);
+  const p25    = calculatePercentile(sortedVals, 25);
+  const p75    = calculatePercentile(sortedVals, 75);
+  const iqr    = p75 - p25;
+
+  // J-Index
+  const jIndex = Math.round(0.001 * Math.pow(mean + stdDev, 2) * 100) / 100;
+
+  // GVI + fluctuation metrics — iterate consecutive pairs
+  let actualPath    = 0;
+  let idealDuration = 0; // minutes (sum of short segments)
+  let fluctCount    = 0;
+  let rapidCount    = 0;
+  let intervalCount = 0;
+
+  for (let i = 1; i < sorted.length; i++) {
+    const dtMs  = sorted[i].date - sorted[i - 1].date;
+    const dtMin = dtMs / 60_000;
+    const dg    = sorted[i].sgv - sorted[i - 1].sgv;
+
+    // GVI path: skip sensor gaps > 20 min
+    if (dtMin > 0 && dtMin <= 20) {
+      actualPath    += Math.sqrt(dtMin * dtMin + dg * dg);
+      idealDuration += dtMin;
+    }
+
+    // Fluctuation: only valid for intervals ≤ 15 min
+    if (dtMin > 0 && dtMin <= 15) {
+      intervalCount++;
+      const rate = Math.abs(dg) / dtMin;
+      if (rate > 1) fluctCount++;
+      if (rate > 2) rapidCount++;
+    }
+  }
+
+  // GVI = actual path length / ideal straight-line path (constant glucose)
+  // Ideal path for a constant signal over `idealDuration` minutes is just `idealDuration`
+  const gvi = idealDuration > 0
+    ? Math.round((actualPath / idealDuration) * 100) / 100
+    : 1;
+
+  // PGS = GVI × % time out of range
+  const oorCount = values.filter((v) => v < tLow || v > tHigh).length;
+  const torPct   = (oorCount / total) * 100;
+  const pgs      = Math.round(gvi * torPct * 100) / 100;
+
+  // Time in fluctuation
+  const timeInFluctuation      = intervalCount > 0
+    ? Math.round((fluctCount  / intervalCount) * 1000) / 10
+    : 0;
+  const timeInRapidFluctuation = intervalCount > 0
+    ? Math.round((rapidCount  / intervalCount) * 1000) / 10
+    : 0;
+
+  // Out-of-range RMS — distance from nearest boundary for OOR readings
+  let outOfRangeRms = 0;
+  if (oorCount > 0) {
+    const sumSq = values
+      .filter((v) => v < tLow || v > tHigh)
+      .reduce((acc, v) => {
+        const dist = v < tLow ? tLow - v : v - tHigh;
+        return acc + dist * dist;
+      }, 0);
+    outOfRangeRms = Math.round(Math.sqrt(sumSq / oorCount) * 10) / 10;
+  }
+
+  // Mean Daily Change — daily averages, then mean of absolute day-to-day differences
+  const byDay = new Map<string, number[]>();
+  for (const entry of sorted) {
+    const key = new Date(entry.date).toISOString().slice(0, 10);
+    if (!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key)!.push(entry.sgv);
+  }
+  const dailyAvgs = [...byDay.values()].map((vs) => calculateMean(vs));
+  let meanDailyChange = 0;
+  if (dailyAvgs.length > 1) {
+    const changes: number[] = [];
+    for (let i = 1; i < dailyAvgs.length; i++) {
+      changes.push(Math.abs(dailyAvgs[i] - dailyAvgs[i - 1]));
+    }
+    meanDailyChange = Math.round(calculateMean(changes) * 10) / 10;
+  }
+
+  // Histogram — 10 mg/dL bins from 40 to 400
+  const histogram: HistogramBin[] = [];
+  for (let bin = 40; bin < 400; bin += 10) {
+    const count = values.filter((v) => v >= bin && v < bin + 10).length;
+    histogram.push({
+      bin,
+      count,
+      percent: Math.round((count / total) * 1000) / 10,
+    });
+  }
+
+  return {
+    totalReadings: total,
+    gvi,
+    pgs,
+    jIndex,
+    iqr,
+    meanDailyChange,
+    outOfRangeRms,
+    timeInFluctuation,
+    timeInRapidFluctuation,
+    histogram,
+  };
+}
+
+// ============================================================================
 // Pattern Detection (Advanced Analysis)
 // ============================================================================
 

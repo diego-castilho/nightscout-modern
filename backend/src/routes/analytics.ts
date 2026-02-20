@@ -11,6 +11,7 @@ import {
   calculateTimeInRange,
   calculateDailyPatterns,
   calculateCalendarData,
+  calculateDistributionStats,
 } from '../services/analytics.js';
 import type { ApiResponse } from '../types/index.js';
 
@@ -239,6 +240,45 @@ router.get('/calendar', async (req, res) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to generate calendar data',
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// GET /api/analytics/distribution - Histogram + advanced variability metrics
+router.get('/distribution', async (req, res) => {
+  try {
+    const { startDate, endDate, low, high } = req.query;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({
+        success: false,
+        error: 'startDate and endDate are required',
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const start = new Date(startDate as string);
+    const end   = new Date(endDate   as string);
+
+    const thresholds = {
+      low:  low  ? Number(low)  : undefined,
+      high: high ? Number(high) : undefined,
+    };
+
+    const entries = await getGlucoseByDateRange(start, end);
+    const distribution = calculateDistributionStats(entries, thresholds);
+
+    return res.json({
+      success: true,
+      data: distribution,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error calculating distribution:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to calculate distribution stats',
       timestamp: new Date().toISOString(),
     });
   }
