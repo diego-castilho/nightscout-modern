@@ -33,6 +33,14 @@ export interface Treatment {
   duration?: number;
   protein?: number;
   fat?: number;
+  mealType?:         string;   // 'almoco'|'jantar'|'cafe_manha'|'lanche'
+  exerciseType?:     string;
+  intensity?:        string;
+  immediateInsulin?: number;
+  extendedInsulin?:  number;
+  preBolus?:         number;
+  rate?:             number;
+  rateMode?:         string;
 }
 
 export interface DeviceStatus {

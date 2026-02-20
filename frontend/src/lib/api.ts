@@ -269,6 +269,7 @@ export interface Treatment {
   immediateInsulin?: number;                   // Combo Bolus: immediate component in U
   extendedInsulin?:  number;                   // Combo Bolus: extended component in U
   preBolus?:         number;                   // Carb time offset in minutes (negative = eaten before, positive = will eat after)
+  mealType?:         string;                   // Meal sub-type: 'almoco'|'jantar'|'cafe_manha'|'lanche'
 }
 
 export async function getTreatments(params?: {
@@ -358,6 +359,57 @@ export async function getDistributionStats(
   const response = await api.get<{ success: boolean; data: DistributionStats }>(
     '/analytics/distribution',
     { params, timeout: 45_000 }
+  );
+  return response.data.data;
+}
+
+// ============================================================================
+// Meal Patterns (Fase 6)
+// ============================================================================
+
+export type MealPeriod = 'cafe_manha' | 'almoco' | 'lanche' | 'jantar' | 'outro';
+
+export interface MealEvent {
+  treatmentId: string;
+  eventType: string;
+  mealType: MealPeriod;
+  timestamp: number;
+  hour: number;
+  carbs: number;
+  insulin: number;
+  preMealGlucose: number | null;
+  glucoseAt1h: number | null;
+  glucoseAt2h: number | null;
+  peakGlucose: number | null;
+  peakDelta: number | null;
+}
+
+export interface MealPeriodStats {
+  period: MealPeriod;
+  label: string;
+  count: number;
+  avgPreMeal: number;
+  avgAt1h: number;
+  avgAt2h: number;
+  avgPeak: number;
+  avgDelta: number;
+  avgCarbs: number;
+  avgInsulin: number;
+  events: MealEvent[];
+}
+
+export interface MealtimeData {
+  periods: MealPeriodStats[];
+  totalEvents: number;
+}
+
+export async function getMealtimeData(
+  startDate: string,
+  endDate: string
+): Promise<MealtimeData> {
+  const response = await api.get<{ success: boolean; data: MealtimeData }>(
+    '/analytics/mealtime',
+    { params: { startDate, endDate }, timeout: 45_000 }
   );
   return response.data.data;
 }

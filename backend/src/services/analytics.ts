@@ -460,6 +460,191 @@ export function calculateDistributionStats(
 }
 
 // ============================================================================
+// Meal Correlation (Fase 6 — Padrões de Refeição)
+// ============================================================================
+
+export type MealPeriod = 'cafe_manha' | 'almoco' | 'lanche' | 'jantar' | 'outro';
+
+export interface MealEvent {
+  treatmentId: string;
+  eventType: string;
+  mealType: MealPeriod;
+  timestamp: number;
+  hour: number;
+  carbs: number;
+  insulin: number;
+  preMealGlucose: number | null;
+  glucoseAt1h: number | null;
+  glucoseAt2h: number | null;
+  peakGlucose: number | null;
+  peakDelta: number | null;
+}
+
+export interface MealPeriodStats {
+  period: MealPeriod;
+  label: string;
+  count: number;
+  avgPreMeal: number;
+  avgAt1h: number;
+  avgAt2h: number;
+  avgPeak: number;
+  avgDelta: number;
+  avgCarbs: number;
+  avgInsulin: number;
+  events: MealEvent[];
+}
+
+export interface MealtimeData {
+  periods: MealPeriodStats[];
+  totalEvents: number;
+}
+
+const PERIOD_LABELS: Record<MealPeriod, string> = {
+  cafe_manha: 'Café da Manhã',
+  almoco:     'Almoço',
+  lanche:     'Lanche',
+  jantar:     'Jantar',
+  outro:      'Outro',
+};
+
+function inferMealPeriod(hour: number, mealType?: string): MealPeriod {
+  if (
+    mealType === 'almoco' || mealType === 'jantar' ||
+    mealType === 'cafe_manha' || mealType === 'lanche'
+  ) {
+    return mealType as MealPeriod;
+  }
+  if (hour >= 5  && hour < 10) return 'cafe_manha';
+  if (hour >= 11 && hour < 15) return 'almoco';
+  if (hour >= 15 && hour < 19) return 'lanche';
+  if (hour >= 19 && hour < 24) return 'jantar';
+  return 'outro';
+}
+
+// Binary search: nearest glucose reading within ±windowMs of targetTs
+function nearestGlucose(
+  sorted: GlucoseEntry[],
+  targetTs: number,
+  windowMs: number
+): number | null {
+  let lo = 0, hi = sorted.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (sorted[mid].date < targetTs) lo = mid + 1;
+    else hi = mid;
+  }
+  let best: number | null = null;
+  let bestDist = Infinity;
+  for (const idx of [lo - 1, lo]) {
+    if (idx < 0 || idx >= sorted.length) continue;
+    const dist = Math.abs(sorted[idx].date - targetTs);
+    if (dist <= windowMs && dist < bestDist) {
+      bestDist = dist;
+      best = sorted[idx].sgv;
+    }
+  }
+  return best;
+}
+
+// Binary search: max glucose in [startTs, endTs]
+function maxGlucoseInRange(
+  sorted: GlucoseEntry[],
+  startTs: number,
+  endTs: number
+): number | null {
+  let lo = 0, hi = sorted.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (sorted[mid].date < startTs) lo = mid + 1;
+    else hi = mid;
+  }
+  let max: number | null = null;
+  for (let i = lo; i < sorted.length && sorted[i].date <= endTs; i++) {
+    if (max === null || sorted[i].sgv > max) max = sorted[i].sgv;
+  }
+  return max;
+}
+
+export function correlateMeals(
+  entries: GlucoseEntry[],
+  treatments: import('../types/index.js').Treatment[]
+): MealtimeData {
+  const MEAL_TYPES = new Set(['Meal Bolus', 'Snack Bolus', 'Carb Correction']);
+  const mealTreatments = treatments.filter((t) => MEAL_TYPES.has(t.eventType));
+
+  if (mealTreatments.length === 0) return { periods: [], totalEvents: 0 };
+
+  // Entries sorted ascending by date (required for binary search)
+  const sorted = [...entries].sort((a, b) => a.date - b.date);
+
+  const WINDOW_MS = 10 * 60_000;      // ±10 min for point-in-time lookup
+  const H1_MS     = 60 * 60_000;      // 1 h
+  const H2_MS     = 2 * 60 * 60_000;  // 2 h
+  const PEAK_MS   = 3 * 60 * 60_000;  // 3 h window for peak search
+
+  const eventMap = new Map<MealPeriod, MealEvent[]>();
+
+  for (const t of mealTreatments) {
+    const ts = new Date(t.created_at || t.timestamp || '').getTime();
+    if (isNaN(ts)) continue;
+
+    const hour      = new Date(ts).getHours();
+    const period    = inferMealPeriod(hour, t.mealType);
+    const preMeal   = nearestGlucose(sorted, ts, WINDOW_MS);
+    const at1h      = nearestGlucose(sorted, ts + H1_MS, WINDOW_MS);
+    const at2h      = nearestGlucose(sorted, ts + H2_MS, WINDOW_MS);
+    const peak      = maxGlucoseInRange(sorted, ts, ts + PEAK_MS);
+    const peakDelta = (preMeal !== null && peak !== null) ? peak - preMeal : null;
+
+    const event: MealEvent = {
+      treatmentId:    t._id,
+      eventType:      t.eventType,
+      mealType:       period,
+      timestamp:      ts,
+      hour,
+      carbs:          t.carbs   ?? 0,
+      insulin:        t.insulin ?? 0,
+      preMealGlucose: preMeal,
+      glucoseAt1h:    at1h,
+      glucoseAt2h:    at2h,
+      peakGlucose:    peak,
+      peakDelta,
+    };
+
+    if (!eventMap.has(period)) eventMap.set(period, []);
+    eventMap.get(period)!.push(event);
+  }
+
+  const avgOrZero = (arr: (number | null)[]): number => {
+    const valid = arr.filter((v): v is number => v !== null);
+    return valid.length > 0 ? Math.round(calculateMean(valid)) : 0;
+  };
+
+  const ORDER: MealPeriod[] = ['cafe_manha', 'almoco', 'lanche', 'jantar', 'outro'];
+  const periods: MealPeriodStats[] = [];
+
+  for (const p of ORDER) {
+    const evs = eventMap.get(p);
+    if (!evs || evs.length === 0) continue;
+    periods.push({
+      period:     p,
+      label:      PERIOD_LABELS[p],
+      count:      evs.length,
+      avgPreMeal: avgOrZero(evs.map((e) => e.preMealGlucose)),
+      avgAt1h:    avgOrZero(evs.map((e) => e.glucoseAt1h)),
+      avgAt2h:    avgOrZero(evs.map((e) => e.glucoseAt2h)),
+      avgPeak:    avgOrZero(evs.map((e) => e.peakGlucose)),
+      avgDelta:   avgOrZero(evs.map((e) => e.peakDelta)),
+      avgCarbs:   Math.round(calculateMean(evs.map((e) => e.carbs))),
+      avgInsulin: Math.round(calculateMean(evs.map((e) => e.insulin)) * 10) / 10,
+      events:     evs.sort((a, b) => b.timestamp - a.timestamp),
+    });
+  }
+
+  return { periods, totalEvents: mealTreatments.length };
+}
+
+// ============================================================================
 // Pattern Detection (Advanced Analysis)
 // ============================================================================
 

@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { Router } from 'express';
-import { getGlucoseByDateRange } from '../db/queries.js';
+import { getGlucoseByDateRange, getTreatments } from '../db/queries.js';
 import {
   generateAnalytics,
   detectPatterns,
@@ -12,6 +12,7 @@ import {
   calculateDailyPatterns,
   calculateCalendarData,
   calculateDistributionStats,
+  correlateMeals,
 } from '../services/analytics.js';
 import type { ApiResponse } from '../types/index.js';
 
@@ -279,6 +280,44 @@ router.get('/distribution', async (req, res) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to calculate distribution stats',
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// GET /api/analytics/mealtime - Meal correlation analysis
+router.get('/mealtime', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({
+        success: false,
+        error: 'startDate and endDate are required',
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const start = new Date(startDate as string);
+    const end   = new Date(endDate   as string);
+
+    const [entries, treatments] = await Promise.all([
+      getGlucoseByDateRange(start, end),
+      getTreatments(start, end),
+    ]);
+
+    const data = correlateMeals(entries, treatments);
+
+    return res.json({
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error correlating meals:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to correlate meals',
       timestamp: new Date().toISOString(),
     });
   }

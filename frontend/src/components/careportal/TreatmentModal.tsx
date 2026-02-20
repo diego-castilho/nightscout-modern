@@ -53,6 +53,7 @@ interface FieldConfig {
   immediateInsulin?: boolean;   // Combo Bolus immediate component
   extendedInsulin?: boolean;    // Combo Bolus extended component
   preBolus?: boolean;           // Carb time offset (when carbs were/will be eaten)
+  mealType?: boolean;           // Meal sub-type (almoco/jantar for Meal, cafe_manha/lanche for Snack)
   // required subsets
   insulinRequired?: boolean;
   carbsRequired?: boolean;
@@ -65,8 +66,8 @@ interface FieldConfig {
 }
 
 const FIELD_CONFIG: Record<EventTypeValue, FieldConfig> = {
-  'Meal Bolus':       { insulin: true, insulinRequired: true, carbs: true, carbsRequired: true, protein: true, fat: true, preBolus: true, glucose: true, notes: true },
-  'Snack Bolus':      { insulin: true, insulinRequired: true, carbs: true, carbsRequired: true, protein: true, fat: true, preBolus: true, glucose: true, notes: true },
+  'Meal Bolus':       { mealType: true, insulin: true, insulinRequired: true, carbs: true, carbsRequired: true, protein: true, fat: true, preBolus: true, glucose: true, notes: true },
+  'Snack Bolus':      { mealType: true, insulin: true, insulinRequired: true, carbs: true, carbsRequired: true, protein: true, fat: true, preBolus: true, glucose: true, notes: true },
   'Correction Bolus': { insulin: true, insulinRequired: true, glucose: true, notes: true },
   'Combo Bolus':      { immediateInsulin: true, immediateInsulinRequired: true, extendedInsulin: true, extendedInsulinRequired: true, duration: true, durationRequired: true, carbs: true, protein: true, fat: true, preBolus: true, glucose: true, notes: true },
   'Carb Correction':  { carbs: true, carbsRequired: true, protein: true, fat: true, glucose: true, notes: true },
@@ -129,6 +130,7 @@ export function TreatmentModal({ onClose, onSuccess, initialValues }: Props) {
   const [penStep, setPenStep]         = useState<0.5 | 1>(1);
   const [exerciseType, setExerciseType] = useState('aeróbico');
   const [intensity, setIntensity]       = useState('moderada');
+  const [mealType, setMealType]         = useState('almoco');
   const [saving, setSaving]           = useState(false);
   const [errors, setErrors]       = useState<string[]>([]);
 
@@ -149,7 +151,7 @@ export function TreatmentModal({ onClose, onSuccess, initialValues }: Props) {
       .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function resetFields() {
+  function resetFields(nextType?: EventTypeValue) {
     setInsulin(''); setCarbs(''); setGlucose('');
     setProtein(''); setFat(''); setNotes('');
     setRate(''); setDuration('');
@@ -158,12 +160,13 @@ export function TreatmentModal({ onClose, onSuccess, initialValues }: Props) {
     setPenStep(1);
     setExerciseType('aeróbico');
     setIntensity('moderada');
+    setMealType(nextType === 'Snack Bolus' ? 'cafe_manha' : 'almoco');
     setErrors([]);
   }
 
   function handleEventTypeChange(v: EventTypeValue) {
     setEventType(v);
-    resetFields();
+    resetFields(v);
   }
 
   function validate(): boolean {
@@ -207,6 +210,7 @@ export function TreatmentModal({ onClose, onSuccess, initialValues }: Props) {
       if (cfg.rateMode)     payload.rateMode     = rateMode;
       if (cfg.exerciseType) payload.exerciseType = exerciseType;
       if (cfg.intensity)    payload.intensity    = intensity;
+      if (cfg.mealType)     payload.mealType     = mealType;
 
       // Persist pen step: update store + server settings
       if (cfg.penStep) {
@@ -407,6 +411,31 @@ export function TreatmentModal({ onClose, onSuccess, initialValues }: Props) {
                   </p>
                 );
               })()}
+            </div>
+          )}
+
+          {/* Tipo de refeição — Meal Bolus / Snack Bolus */}
+          {cfg.mealType && (
+            <div className="space-y-1.5">
+              <Label>Tipo de refeição</Label>
+              <div className="flex gap-4">
+                {(eventType === 'Snack Bolus'
+                  ? [{ value: 'cafe_manha', label: 'Café da Manhã' }, { value: 'lanche', label: 'Lanche' }]
+                  : [{ value: 'almoco',     label: 'Almoço' },        { value: 'jantar',  label: 'Jantar'  }]
+                ).map(({ value, label }) => (
+                  <label key={value} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                    <input
+                      type="radio"
+                      name="mealType"
+                      value={value}
+                      checked={mealType === value}
+                      onChange={() => setMealType(value)}
+                      className="accent-primary"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
             </div>
           )}
 
