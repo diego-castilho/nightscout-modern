@@ -63,7 +63,7 @@ interface DashboardState {
 }
 
 function applyThemeClasses(darkMode: boolean) {
-  darkMode ? document.documentElement.classList.add('dark') : document.documentElement.classList.remove('dark');
+  document.documentElement.classList.toggle('dark', darkMode);
 }
 
 export const useDashboardStore = create<DashboardState>()(

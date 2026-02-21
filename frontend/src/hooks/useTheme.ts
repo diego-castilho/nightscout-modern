@@ -10,7 +10,7 @@ export function useTheme() {
 
   // Sync classes whenever state changes (guard against external mutations)
   useEffect(() => {
-    darkMode ? document.documentElement.classList.add('dark') : document.documentElement.classList.remove('dark');
+    document.documentElement.classList.toggle('dark', darkMode);
   }, [darkMode]);
 
   function cycleTheme() {

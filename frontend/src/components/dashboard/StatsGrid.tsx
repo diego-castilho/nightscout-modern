@@ -50,6 +50,8 @@ function StatCard({ title, value, subtitle, status = 'neutral', loading }: StatC
 }
 
 export function StatsGrid({ analytics, loading }: Props) {
+  const { unit } = useDashboardStore();
+
   if (loading || !analytics) {
     return (
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -59,8 +61,6 @@ export function StatsGrid({ analytics, loading }: Props) {
       </div>
     );
   }
-
-  const { unit } = useDashboardStore();
   const { stats, period } = analytics;
 
   // CV% status: good <36%, warning 36-50%, bad >50%
