@@ -130,6 +130,14 @@ body {
   font-feature-settings: 'rlig' 1, 'calt' 1;
 }
 
+/* ── Recharts: remove focus outline (decorative charts, not keyboard targets) ── */
+.recharts-wrapper:focus,
+.recharts-wrapper:focus-visible,
+.recharts-wrapper svg:focus,
+.recharts-wrapper svg:focus-visible {
+  outline: none;
+}
+
 /* ── Glucose color utilities ───────────────────────────────────────────────── */
 @layer utilities {
   .glucose-color-very-low  { @apply text-red-600 dark:text-red-500; }
