@@ -60,8 +60,16 @@ router.post('/login', loginLimiter, (req, res) => {
     });
   }
 
-  const jwtSecret  = process.env.JWT_SECRET!;
-  const expiresIn  = (process.env.JWT_EXPIRES_IN ?? '7d') as jwt.SignOptions['expiresIn'];
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret) {
+    return res.status(500).json({
+      success: false,
+      error: 'Configuração de autenticação ausente no servidor.',
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  const expiresIn = (process.env.JWT_EXPIRES_IN ?? '7d') as jwt.SignOptions['expiresIn'];
   const token = jwt.sign({ role: 'owner' }, jwtSecret, { expiresIn });
 
   return res.json({

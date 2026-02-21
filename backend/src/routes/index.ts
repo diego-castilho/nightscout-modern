@@ -116,7 +116,19 @@ router.get('/stats', async (_req, res) => {
   }
 });
 
-// Debug endpoint - list all databases
+// Public routes (no auth required)
+router.use('/auth', authRouter);
+
+// All routes below require a valid JWT
+router.use(authenticate);
+
+// Protected route modules
+router.use('/glucose', glucoseRouter);
+router.use('/analytics', analyticsRouter);
+router.use('/settings', settingsRouter);
+router.use('/treatments', treatmentsRouter);
+
+// Debug endpoint — requer autenticação (JWT) para listar bancos de dados
 router.get('/debug/databases', async (_req, res) => {
   try {
     const { MongoClient } = await import('mongodb');
@@ -146,25 +158,14 @@ router.get('/debug/databases', async (_req, res) => {
       currentDb: process.env.MONGODB_DB_NAME || 'nightscout',
       timestamp: new Date().toISOString(),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
     return res.status(500).json({
       success: false,
-      error: error.message,
+      error: msg,
       timestamp: new Date().toISOString(),
     });
   }
 });
-
-// Public routes (no auth required)
-router.use('/auth', authRouter);
-
-// All routes below require a valid JWT
-router.use(authenticate);
-
-// Protected route modules
-router.use('/glucose', glucoseRouter);
-router.use('/analytics', analyticsRouter);
-router.use('/settings', settingsRouter);
-router.use('/treatments', treatmentsRouter);
 
 export default router;

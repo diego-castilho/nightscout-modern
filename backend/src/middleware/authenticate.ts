@@ -17,9 +17,18 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
     });
   }
 
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    return res.status(500).json({
+      success: false,
+      error: 'Configuração de servidor inválida.',
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   try {
     const token = header.slice(7);
-    jwt.verify(token, process.env.JWT_SECRET!);
+    jwt.verify(token, secret);
     return next();
   } catch {
     return res.status(401).json({

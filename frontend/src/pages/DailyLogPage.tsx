@@ -139,14 +139,18 @@ function StatPill({
   );
 }
 
-function ChartTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: { date: number; sgv: number } }> }) {
+function ChartTooltip({ active, payload, unit }: {
+  active?:  boolean;
+  payload?: Array<{ payload: { date: number; sgv: number } }>;
+  unit:     'mgdl' | 'mmol';
+}) {
   if (!active || !payload?.length) return null;
   const d = payload[0]?.payload;
   if (!d) return null;
   return (
     <div className="bg-background border border-border rounded-md shadow p-2 text-xs">
       <div className="text-muted-foreground mb-0.5">{format(new Date(d.date), 'HH:mm')}</div>
-      <div className="font-bold">{d.sgv} mg/dL</div>
+      <div className="font-bold">{formatGlucose(d.sgv, unit)} {unitLabel(unit)}</div>
     </div>
   );
 }
@@ -406,7 +410,10 @@ export function DailyLogPage() {
                       axisLine={false}
                       width={36}
                     />
-                    <Tooltip content={<ChartTooltip />} />
+                    <Tooltip content={({ active, payload }) => (
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      <ChartTooltip active={active} payload={payload as any} unit={unit} />
+                    )} />
                     {/* Threshold lines */}
                     <ReferenceLine
                       y={alarmThresholds.low}

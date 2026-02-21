@@ -43,11 +43,15 @@ const ZONE_AVG_TEXT: Record<CalendarDayData['zone'], string> = {
 // Mini-tooltip do gráfico de detalhe
 // ============================================================================
 
-function DayTooltip({ active, payload }: { active?: boolean; payload?: { value: number; payload: { time: string } }[] }) {
+function DayTooltip({ active, payload, unit }: {
+  active?:  boolean;
+  payload?: { value: number; payload: { time: string } }[];
+  unit:     'mgdl' | 'mmol';
+}) {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-background border border-border rounded px-2 py-1 text-xs shadow">
-      <p className="font-medium">{payload[0].value} mg/dL</p>
+      <p className="font-medium">{formatGlucose(payload[0].value, unit)} {unitLabel(unit)}</p>
       <p className="text-muted-foreground">{payload[0].payload.time}</p>
     </div>
   );
@@ -424,7 +428,10 @@ export function CalendarPage() {
                     </linearGradient>
                   </defs>
                   <XAxis dataKey="time" hide />
-                  <Tooltip content={<DayTooltip />} />
+                  <Tooltip content={({ active, payload }) => (
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    <DayTooltip active={active} payload={payload as any} unit={unit} />
+                  )} />
                   <ReferenceLine y={alarmThresholds.high} stroke="#f59e0b" strokeDasharray="3 3" strokeWidth={1} />
                   <ReferenceLine y={alarmThresholds.low}  stroke="#f97316" strokeDasharray="3 3" strokeWidth={1} />
                   <Area
