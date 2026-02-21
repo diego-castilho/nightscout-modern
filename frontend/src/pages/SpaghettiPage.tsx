@@ -67,7 +67,7 @@ function minuteToLabel(min: number): string {
 
 interface SpaghettiTooltipProps {
   active?:    boolean;
-  payload?:   any[];
+  payload?:   readonly any[];
   label?:     number;
   unit:       'mgdl' | 'mmol';
   dayLabels:  string[];
@@ -451,9 +451,11 @@ export function SpaghettiPage() {
                       width={44}
                     />
                     <Tooltip
-                      content={(props) => (
+                      content={({ active, payload, label }) => (
                         <SpaghettiTooltip
-                          {...props}
+                          active={active}
+                          payload={payload}
+                          label={label as number | undefined}
                           unit={unit}
                           dayLabels={dayLabels}
                           hiddenDays={hiddenDays}

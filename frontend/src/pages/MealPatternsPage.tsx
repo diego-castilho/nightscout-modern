@@ -96,7 +96,7 @@ function ResponseSparkline({ stats, unit, low, high, color }: SparklineProps) {
             borderRadius: '6px',
             fontSize: 12,
           }}
-          formatter={(v: number) => [`${v} ${unitLabel(unit)}`, 'Glicemia']}
+          formatter={((v: number) => [`${v} ${unitLabel(unit)}`, 'Glicemia']) as unknown as undefined}
         />
         <ReferenceLine y={tLow}  stroke="#f97316" strokeDasharray="4 2" strokeWidth={1} />
         <ReferenceLine y={tHigh} stroke="#22c55e" strokeDasharray="4 2" strokeWidth={1} />
