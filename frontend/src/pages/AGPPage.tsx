@@ -25,16 +25,13 @@ import { useDashboardStore } from '../stores/dashboardStore';
 import { getAnalytics, getGlucoseRange } from '../lib/api';
 import type { GlucoseAnalytics, GlucoseEntry } from '../lib/api';
 import { formatGlucose, unitLabel } from '../lib/glucose';
+import { PERIOD_OPTIONS } from '../lib/periods';
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-const PERIODS = [
-  { label: '7 dias',  days: 7  },
-  { label: '14 dias', days: 14 },
-  { label: '30 dias', days: 30 },
-];
+const PERIODS = PERIOD_OPTIONS;
 
 const AGP_TICKS = ['00:00', '03:00', '06:00', '09:00', '12:00', '15:00', '18:00', '21:00'];
 

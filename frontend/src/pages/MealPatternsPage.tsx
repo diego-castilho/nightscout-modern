@@ -24,16 +24,13 @@ import { useDashboardStore } from '../stores/dashboardStore';
 import { getMealtimeData } from '../lib/api';
 import type { MealtimeData, MealPeriodStats, MealEvent } from '../lib/api';
 import { formatGlucose, unitLabel } from '../lib/glucose';
+import { PERIOD_OPTIONS } from '../lib/periods';
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-const PERIODS = [
-  { label: '7 dias',  days: 7  },
-  { label: '14 dias', days: 14 },
-  { label: '30 dias', days: 30 },
-];
+const PERIODS = PERIOD_OPTIONS;
 
 const PERIOD_COLORS: Record<string, string> = {
   cafe_manha: '#f59e0b', // amber

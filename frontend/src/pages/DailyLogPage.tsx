@@ -45,8 +45,7 @@ function treatmentCategory(t: Treatment): 'rapid' | 'slow' | 'carbs' | 'other' {
 function treatmentLabel(t: Treatment): string {
   const cat = treatmentCategory(t);
   if (cat === 'rapid') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const dose = (t.insulin ?? 0) + ((t as any).immediateInsulin ?? 0) + ((t as any).extendedInsulin ?? 0);
+    const dose = (t.insulin ?? 0) + (t.immediateInsulin ?? 0) + (t.extendedInsulin ?? 0);
     return dose > 0 ? `${Math.round(dose * 10) / 10}U` : '';
   }
   if (cat === 'slow')  return t.insulin ? `${t.insulin}U` : '';

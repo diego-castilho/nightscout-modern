@@ -27,16 +27,13 @@ import { getDistributionStats } from '../lib/api';
 import type { DistributionStats } from '../lib/api';
 import type { AlarmThresholds } from '../stores/dashboardStore';
 import { formatGlucose, unitLabel } from '../lib/glucose';
+import { PERIOD_OPTIONS } from '../lib/periods';
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-const PERIODS = [
-  { label: '7 dias',  days: 7  },
-  { label: '14 dias', days: 14 },
-  { label: '30 dias', days: 30 },
-];
+const PERIODS = PERIOD_OPTIONS;
 
 // ============================================================================
 // Helpers

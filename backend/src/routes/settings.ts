@@ -10,6 +10,29 @@ const router = Router();
 const COLLECTION = 'app_settings';
 const DOC_KEY    = 'global';
 
+// ============================================================================
+// Whitelist — known AppSettings top-level keys
+// ============================================================================
+
+const ALLOWED_KEYS = new Set([
+  'unit', 'patientName', 'refreshInterval', 'dia', 'carbAbsorptionRate',
+  'alarmThresholds', 'deviceAgeThresholds', 'scheduledBasalRate',
+  'isf', 'icr', 'targetBG', 'targetBGHigh', 'rapidPenStep', 'predictionsDefault',
+]);
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+function validateSettings(body: unknown): string | null {
+  if (!isPlainObject(body)) return 'Body deve ser um objeto JSON.';
+  for (const key of Object.keys(body)) {
+    if (key.startsWith('$')) return `Chave inválida: ${key}`;
+    if (!ALLOWED_KEYS.has(key))  return `Chave desconhecida: ${key}`;
+  }
+  return null;
+}
+
 // GET /api/settings - Return stored settings (null if never saved)
 router.get('/', async (_req, res) => {
   try {
@@ -32,6 +55,15 @@ router.get('/', async (_req, res) => {
 
 // PUT /api/settings - Save settings (upsert)
 router.put('/', async (req, res) => {
+  const validationError = validateSettings(req.body);
+  if (validationError) {
+    return res.status(400).json({
+      success: false,
+      error: validationError,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   try {
     const db = getDatabase();
     await db.collection(COLLECTION).updateOne(

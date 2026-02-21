@@ -13,16 +13,13 @@ import { useDashboardStore } from '../stores/dashboardStore';
 import { getDailyPatterns } from '../lib/api';
 import type { DailyPattern } from '../lib/api';
 import { formatGlucose, unitLabel } from '../lib/glucose';
+import { PERIOD_OPTIONS } from '../lib/periods';
 
 // ============================================================================
 // Constants & types
 // ============================================================================
 
-const PERIODS = [
-  { label: '7 dias',  days: 7  },
-  { label: '14 dias', days: 14 },
-  { label: '30 dias', days: 30 },
-];
+const PERIODS = PERIOD_OPTIONS;
 
 type ViewMode = 'boxplot' | 'heatmap';
 type GlucoseZone = 'veryLow' | 'low' | 'inRange' | 'high' | 'veryHigh' | 'noData';

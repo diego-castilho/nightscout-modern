@@ -5,10 +5,11 @@
 // calculateIOB(). Re-runs every 60 s so the value decrements in real time
 // even when no new data arrives. Re-fetches whenever lastRefresh changes
 // (i.e. after a new treatment is registered via the careportal modal).
+// Uses the shared treatmentsCache to avoid duplicate requests with useCOB.
 // ============================================================================
 
 import { useState, useEffect, useCallback } from 'react';
-import { getTreatments } from '../lib/api';
+import { getCachedTreatments } from '../lib/treatmentsCache';
 import { calculateIOB } from '../lib/iob';
 import { useDashboardStore } from '../stores/dashboardStore';
 
@@ -18,10 +19,13 @@ export function useIOB(): number {
 
   const recalculate = useCallback(async () => {
     try {
-      const startDate = new Date(Date.now() - dia * 3_600_000).toISOString();
-      const endDate   = new Date().toISOString();
-      const treatments = await getTreatments({ startDate, endDate, limit: 200 });
-      setIob(calculateIOB(treatments ?? [], dia, scheduledBasalRate));
+      const allTreatments = await getCachedTreatments(lastRefresh);
+      // Filter to the DIA window (cache covers 8 h; IOB only needs dia hours).
+      const cutoff = Date.now() - dia * 3_600_000;
+      const treatments = allTreatments.filter(
+        (t) => new Date(t.created_at).getTime() >= cutoff,
+      );
+      setIob(calculateIOB(treatments, dia, scheduledBasalRate));
     } catch {
       // Keep previous value on fetch error
     }

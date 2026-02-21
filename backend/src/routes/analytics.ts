@@ -3,6 +3,7 @@
 // ============================================================================
 
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { getGlucoseByDateRange, getTreatments } from '../db/queries.js';
 import {
   generateAnalytics,
@@ -17,6 +18,24 @@ import {
 import type { ApiResponse } from '../types/index.js';
 
 const router = Router();
+
+// Rate limit: 60 requests per minute per authenticated user (keyed by JWT token
+// when present, falling back to IP for unauthenticated requests).
+const analyticsLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) =>
+    (req.headers.authorization as string | undefined) ?? req.ip ?? 'unknown',
+  message: {
+    success: false,
+    error: 'Muitas requisições. Tente novamente em 1 minuto.',
+    timestamp: new Date().toISOString(),
+  },
+});
+
+router.use(analyticsLimiter);
 
 // GET /api/analytics - Get complete analytics for a date range
 router.get('/', async (req, res) => {

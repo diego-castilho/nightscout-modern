@@ -24,15 +24,13 @@ import { useDashboardStore } from '../stores/dashboardStore';
 import { getGlucoseRange } from '../lib/api';
 import type { GlucoseEntry } from '../lib/api';
 import { formatGlucose, unitLabel } from '../lib/glucose';
+import { PERIOD_OPTIONS } from '../lib/periods';
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-const PERIODS = [
-  { label: '7 dias',  days: 7  },
-  { label: '14 dias', days: 14 },
-];
+const PERIODS = PERIOD_OPTIONS.slice(0, 2);
 
 // 14 distinct colours for up to 14 day lines
 const SPAGHETTI_COLORS = [

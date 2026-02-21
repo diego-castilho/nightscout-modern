@@ -110,7 +110,7 @@ function formatWeekRange(start: Date, end: Date): string {
 
 function fmtNum(val: number, suffix: string): string {
   if (val <= 0) return '—';
-  return `${Number.isInteger(val * 10) ? val.toFixed(1) : val.toFixed(1)}${suffix}`;
+  return `${Number.isInteger(val) ? val.toString() : val.toFixed(1)}${suffix}`;
 }
 
 // ============================================================================

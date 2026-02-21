@@ -5,16 +5,13 @@
 // meal size at any absorption rate ≥ 10 g/h: 240g / 10 g/h = 24h covered
 // by capping at 8h which handles up to 240g at 30 g/h comfortably).
 // Recalculates every 60 s so the value decrements in real time.
+// Uses the shared treatmentsCache to avoid duplicate requests with useIOB.
 // ============================================================================
 
 import { useState, useEffect, useCallback } from 'react';
-import { getTreatments } from '../lib/api';
+import { getCachedTreatments } from '../lib/treatmentsCache';
 import { calculateCOB } from '../lib/cob';
 import { useDashboardStore } from '../stores/dashboardStore';
-
-// Maximum look-back window: covers a very large meal (240 g) at slowest
-// typical rate (30 g/h → 8 h). Prevents unbounded fetches.
-const FETCH_WINDOW_HOURS = 8;
 
 export function useCOB(): number {
   const { carbAbsorptionRate, lastRefresh } = useDashboardStore();
@@ -22,12 +19,8 @@ export function useCOB(): number {
 
   const recalculate = useCallback(async () => {
     try {
-      const startDate = new Date(
-        Date.now() - FETCH_WINDOW_HOURS * 3_600_000,
-      ).toISOString();
-      const endDate = new Date().toISOString();
-      const treatments = await getTreatments({ startDate, endDate, limit: 200 });
-      setCob(calculateCOB(treatments ?? [], carbAbsorptionRate));
+      const treatments = await getCachedTreatments(lastRefresh);
+      setCob(calculateCOB(treatments, carbAbsorptionRate));
     } catch {
       // Keep previous value on fetch error
     }
