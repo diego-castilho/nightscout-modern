@@ -61,8 +61,7 @@ function computeDayStats(
 
   const totalRapid = treatments
     .filter((tr) => RAPID_TYPES.has(tr.eventType))
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .reduce((s, tr: any) => s + (tr.insulin || 0) + (tr.immediateInsulin || 0) + (tr.extendedInsulin || 0), 0);
+    .reduce((s, tr) => s + (tr.insulin || 0) + (tr.immediateInsulin || 0) + (tr.extendedInsulin || 0), 0);
   const totalSlow = treatments
     .filter((tr) => SLOW_TYPES.has(tr.eventType))
     .reduce((s, tr) => s + (tr.insulin || 0), 0);
@@ -217,7 +216,6 @@ export function DailyLogPage() {
         />
       )];
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [treatments, startTs, endTs]
   );
 
@@ -384,8 +382,7 @@ export function DailyLogPage() {
                       width={36}
                     />
                     <Tooltip content={({ active, payload }) => (
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      <ChartTooltip active={active} payload={payload as any} unit={unit} />
+                      <ChartTooltip active={active} payload={payload as Array<{ payload: { date: number; sgv: number } }>} unit={unit} />
                     )} />
                     {/* Threshold lines */}
                     <GlucoseReferenceLines thresholds={alarmThresholds} unit={unit} which={['low', 'high']} showLabels={false} />

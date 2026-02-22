@@ -300,10 +300,16 @@ function TreatmentLabel({ viewBox, treatment, isActive, onClick }: TreatmentLabe
 
 // ── Recharts tooltip for glucose points ──────────────────────────────────────
 
+interface ChartDataPoint {
+  time:           number;
+  sgv?:           number;
+  sgvPredicted?:  number;
+  direction?:     string;
+}
+
 interface CustomTooltipProps {
   active?: boolean;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  payload?: Array<{ payload: any }>;
+  payload?: Array<{ payload: ChartDataPoint }>;
   unit: GlucoseUnit;
   thresholds: AlarmThresholds;
 }
@@ -500,12 +506,10 @@ export const GlucoseAreaChart = memo(function GlucoseAreaChart({ entries, loadin
   ].filter((r) => r.y > minVal && r.y < maxVal);
 
   // Zoom handlers
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleMouseDown = (e: any) => {
+  const handleMouseDown = (e: { activeLabel?: string | number | null }) => {
     if (e?.activeLabel != null) setZoomLeft(Number(e.activeLabel));
   };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleMouseMove = (e: any) => {
+  const handleMouseMove = (e: { activeLabel?: string | number | null }) => {
     if (zoomLeft !== null && e?.activeLabel != null) setZoomRight(Number(e.activeLabel));
   };
   const handleMouseUp = () => {
@@ -677,8 +681,7 @@ export const GlucoseAreaChart = memo(function GlucoseAreaChart({ entries, loadin
                   key={t._id}
                   x={new Date(t.created_at).getTime()}
                   stroke="none"
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  label={(<TreatmentLabel
+                  label={<TreatmentLabel
                     treatment={t}
                     isActive={treatmentTooltip?.treatment._id === t._id}
                     onClick={(tr, cx, cy) =>
@@ -686,7 +689,7 @@ export const GlucoseAreaChart = memo(function GlucoseAreaChart({ entries, loadin
                         prev?.treatment._id === tr._id ? null : { treatment: tr, cx, cy }
                       )
                     }
-                  />) as any}
+                  />}
                 />
               ))}
 

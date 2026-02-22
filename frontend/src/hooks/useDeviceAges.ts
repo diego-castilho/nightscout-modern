@@ -39,7 +39,7 @@ export function useDeviceAges(): DeviceAges {
     } catch {
       // Keep previous value on fetch error
     }
-  }, [lastRefresh, deviceAgeThresholds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [lastRefresh, deviceAgeThresholds]);
 
   useEffect(() => {
     recalculate();

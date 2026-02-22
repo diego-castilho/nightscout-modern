@@ -430,8 +430,7 @@ export function CalendarPage() {
                   </defs>
                   <XAxis dataKey="time" hide />
                   <Tooltip content={({ active, payload }) => (
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    <DayTooltip active={active} payload={payload as any} unit={unit} />
+                    <DayTooltip active={active} payload={payload as { value: number; payload: { time: string } }[]} unit={unit} />
                   )} />
                   <GlucoseReferenceLines thresholds={alarmThresholds} unit={unit} which={['low', 'high']} showLabels={false} />
                   <Area

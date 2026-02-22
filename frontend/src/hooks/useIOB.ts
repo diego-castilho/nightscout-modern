@@ -29,7 +29,7 @@ export function useIOB(): number {
     } catch {
       // Keep previous value on fetch error
     }
-  }, [dia, lastRefresh, scheduledBasalRate]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dia, lastRefresh, scheduledBasalRate]);
 
   useEffect(() => {
     recalculate();

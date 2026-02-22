@@ -63,9 +63,15 @@ function minuteToLabel(min: number): string {
 // Custom Tooltip
 // ============================================================================
 
+interface SpaghettiPayloadEntry {
+  dataKey: string;
+  value:   number | null;
+  stroke:  string;
+}
+
 interface SpaghettiTooltipProps {
   active?:    boolean;
-  payload?:   readonly any[];
+  payload?:   readonly SpaghettiPayloadEntry[];
   label?:     number;
   unit:       'mgdl' | 'mmol';
   dayLabels:  string[];
@@ -74,11 +80,13 @@ interface SpaghettiTooltipProps {
 
 function SpaghettiTooltip({ active, payload, label, unit, dayLabels, hiddenDays }: SpaghettiTooltipProps) {
   if (!active || !payload?.length || label === undefined) return null;
-  const valid = payload.filter((p) => {
-    if (p.value === undefined || p.value === null) return false;
-    const idx = parseInt(p.dataKey.replace('day', ''), 10);
-    return !hiddenDays.has(idx);
-  });
+  const valid = payload.filter(
+    (p): p is SpaghettiPayloadEntry & { value: number } => {
+      if (p.value == null) return false;
+      const idx = parseInt(p.dataKey.replace('day', ''), 10);
+      return !hiddenDays.has(idx);
+    }
+  );
   if (valid.length === 0) return null;
   const h = Math.floor(label / 60);
   const m = label % 60;
@@ -86,7 +94,7 @@ function SpaghettiTooltip({ active, payload, label, unit, dayLabels, hiddenDays 
   return (
     <div className="bg-card border border-border rounded-md p-2 text-xs shadow-lg space-y-0.5 max-w-[190px]">
       <p className="font-semibold">{`${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`}</p>
-      {valid.map((p: any) => {
+      {valid.map((p) => {
         const idx = parseInt(p.dataKey.replace('day', ''), 10);
         return (
           <div key={p.dataKey} className="flex items-center gap-1.5">

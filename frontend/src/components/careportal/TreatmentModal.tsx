@@ -12,6 +12,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { createTreatment, saveSettings, getLatestGlucose } from '../../lib/api';
+import type { Treatment } from '../../lib/api';
 import { useDashboardStore } from '../../stores/dashboardStore';
 import { unitLabel, fromDisplayUnit, toDisplayUnit } from '../../lib/glucose';
 
@@ -148,8 +149,8 @@ export function TreatmentModal({ onClose, onSuccess, initialValues }: Props) {
           });
         }
       })
-      .catch(() => {});
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+      .catch((err) => { console.error('Failed to fetch latest glucose:', err); });
+  }, [unit]);
 
   function resetFields(nextType?: EventTypeValue) {
     setInsulin(''); setCarbs(''); setGlucose('');
@@ -221,7 +222,7 @@ export function TreatmentModal({ onClose, onSuccess, initialValues }: Props) {
         payload.notes = notes.trim() ? `${notes.trim()} | ${stepNote}` : stepNote;
       }
 
-      await createTreatment(payload as any);
+      await createTreatment(payload as Omit<Treatment, '_id'>);
       onSuccess();
       onClose();
     } catch {

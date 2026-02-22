@@ -33,8 +33,8 @@ function AuthenticatedLayout() {
   useEffect(() => {
     getSettings()
       .then((settings) => { if (settings) initFromServer(settings); })
-      .catch(() => {});
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+      .catch((err) => { console.error('Failed to load settings:', err); });
+  }, [initFromServer]);
 
   const { latest } = useGlucoseData();
   const lastUpdated = latest ? new Date(latest.date) : null;

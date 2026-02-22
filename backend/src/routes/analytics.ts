@@ -19,6 +19,14 @@ import type { ApiResponse } from '../types/index.js';
 
 const router = Router();
 
+// Safely parses a query-string threshold value.
+// Returns undefined for missing/empty/NaN values to fall back to server defaults.
+function parseThreshold(v: unknown): number | undefined {
+  if (!v) return undefined;
+  const n = Number(v);
+  return isNaN(n) ? undefined : n;
+}
+
 // Rate limit: 60 requests per minute per authenticated user (keyed by JWT token
 // when present, falling back to IP for unauthenticated requests).
 const analyticsLimiter = rateLimit({
@@ -54,10 +62,10 @@ router.get('/', async (req, res) => {
     const end = new Date(endDate as string);
 
     const thresholds = {
-      veryLow:  veryLow  ? Number(veryLow)  : undefined,
-      low:      low      ? Number(low)      : undefined,
-      high:     high     ? Number(high)     : undefined,
-      veryHigh: veryHigh ? Number(veryHigh) : undefined,
+      veryLow:  parseThreshold(veryLow),
+      low:      parseThreshold(low),
+      high:     parseThreshold(high),
+      veryHigh: parseThreshold(veryHigh),
     };
 
     const entries = await getGlucoseByDateRange(start, end);
@@ -241,10 +249,10 @@ router.get('/calendar', async (req, res) => {
     const end   = new Date(endDate   as string);
 
     const thresholds = {
-      veryLow:  veryLow  ? Number(veryLow)  : undefined,
-      low:      low      ? Number(low)      : undefined,
-      high:     high     ? Number(high)     : undefined,
-      veryHigh: veryHigh ? Number(veryHigh) : undefined,
+      veryLow:  parseThreshold(veryLow),
+      low:      parseThreshold(low),
+      high:     parseThreshold(high),
+      veryHigh: parseThreshold(veryHigh),
     };
 
     const entries = await getGlucoseByDateRange(start, end);
@@ -282,8 +290,8 @@ router.get('/distribution', async (req, res) => {
     const end   = new Date(endDate   as string);
 
     const thresholds = {
-      low:  low  ? Number(low)  : undefined,
-      high: high ? Number(high) : undefined,
+      low:  parseThreshold(low),
+      high: parseThreshold(high),
     };
 
     const entries = await getGlucoseByDateRange(start, end);

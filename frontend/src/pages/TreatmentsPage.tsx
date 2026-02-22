@@ -90,17 +90,19 @@ export function TreatmentsPage() {
   const [treatments, setTreatments] = useState<Treatment[]>([]);
   const [loading,   setLoading]   = useState(false);
   const [error,     setError]     = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [deleting,  setDeleting]  = useState<string | null>(null);
+  const [modalOpen,       setModalOpen]       = useState(false);
+  const [deleting,        setDeleting]        = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteError,     setDeleteError]     = useState<string | null>(null);
 
   const fetchTreatments = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const { startDate, endDate } = periodDates(period);
-      const params: Record<string, string | number> = { startDate, endDate, limit: 500 };
+      const params: { startDate: string; endDate: string; limit: number; eventType?: string } = { startDate, endDate, limit: 500 };
       if (eventType) params.eventType = eventType;
-      const data = await getTreatments(params as any);
+      const data = await getTreatments(params);
       setTreatments(data);
     } catch {
       setError('Erro ao carregar tratamentos. Tente novamente.');
@@ -113,14 +115,15 @@ export function TreatmentsPage() {
     fetchTreatments();
   }, [fetchTreatments]);
 
-  async function handleDelete(id: string) {
-    if (!confirm('Remover este tratamento?')) return;
+  async function confirmDelete(id: string) {
+    setDeleteError(null);
     setDeleting(id);
+    setPendingDeleteId(null);
     try {
       await deleteTreatment(id);
       setTreatments((prev) => prev.filter((t) => t._id !== id));
     } catch {
-      alert('Erro ao remover tratamento.');
+      setDeleteError('Erro ao remover tratamento. Tente novamente.');
     } finally {
       setDeleting(null);
     }
@@ -176,13 +179,21 @@ export function TreatmentsPage() {
           </div>
         )}
 
-        {/* Erro */}
+        {/* Erro de carregamento */}
         {!loading && error && (
           <div className="rounded-lg border border-destructive bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {error}
             <button onClick={fetchTreatments} className="ml-2 underline text-xs">
               Tentar novamente
             </button>
+          </div>
+        )}
+
+        {/* Erro de remoção */}
+        {deleteError && (
+          <div className="rounded-lg border border-destructive bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center justify-between mb-4">
+            {deleteError}
+            <button onClick={() => setDeleteError(null)} className="ml-2 underline text-xs">Fechar</button>
           </div>
         )}
 
@@ -238,14 +249,33 @@ export function TreatmentsPage() {
                             )}
                           </div>
                         </div>
-                        <button
-                          onClick={() => handleDelete(t._id)}
-                          disabled={deleting === t._id}
-                          className="shrink-0 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-40 mt-0.5"
-                          title="Remover"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        {pendingDeleteId === t._id ? (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              onClick={() => confirmDelete(t._id)}
+                              disabled={deleting === t._id}
+                              className="text-xs text-destructive font-medium hover:underline disabled:opacity-40"
+                            >
+                              Remover
+                            </button>
+                            <span className="text-muted-foreground text-xs">/</span>
+                            <button
+                              onClick={() => setPendingDeleteId(null)}
+                              className="text-xs text-muted-foreground hover:underline"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setPendingDeleteId(t._id)}
+                            disabled={deleting === t._id}
+                            className="shrink-0 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-40 mt-0.5"
+                            title="Remover"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                       </div>
                     );
                   })}

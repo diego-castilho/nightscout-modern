@@ -120,8 +120,8 @@ function setupChangeStreams() {
     });
 
     console.log('👁️  MongoDB Change Streams active (real-time updates enabled)');
-  } catch (error: any) {
-    console.warn('⚠️  Could not set up Change Streams:', error.message);
+  } catch (error: unknown) {
+    console.warn('⚠️  Could not set up Change Streams:', (error as { message?: string })?.message ?? String(error));
     startPollingFallback();
   }
 }
@@ -130,7 +130,11 @@ function setupChangeStreams() {
 // Polling fallback — used when MongoDB is standalone (no replica set)
 // Checks for new glucose entries every 30 seconds and emits via WebSocket.
 // ============================================================================
+let pollingIntervalHandle: ReturnType<typeof setInterval> | null = null;
+
 function startPollingFallback() {
+  if (pollingIntervalHandle !== null) return; // prevent duplicate intervals
+
   let lastSeenDate = Date.now();
 
   const poll = async () => {
@@ -159,7 +163,7 @@ function startPollingFallback() {
     }
   };
 
-  setInterval(poll, 30_000);
+  pollingIntervalHandle = setInterval(poll, 30_000);
 }
 
 export function getSocketIO(): SocketIOServer | null {

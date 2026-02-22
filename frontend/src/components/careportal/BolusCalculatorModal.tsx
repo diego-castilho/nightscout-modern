@@ -83,7 +83,7 @@ export function BolusCalculatorModal({ onClose, onRegister }: Props) {
       })
       .catch(() => { /* deixa vazio — usuário preenche manualmente */ })
       .finally(() => setBgLoading(false));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [unit]);
 
   // ---- Auto-fetch recent carb treatments ------------------------------------
 

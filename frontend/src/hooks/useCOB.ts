@@ -24,7 +24,7 @@ export function useCOB(): number {
     } catch {
       // Keep previous value on fetch error
     }
-  }, [carbAbsorptionRate, lastRefresh]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [carbAbsorptionRate, lastRefresh]);
 
   useEffect(() => {
     recalculate();
