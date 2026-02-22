@@ -5,6 +5,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { toDisplayUnit, unitLabel } from '../../lib/glucose';
 import { useDashboardStore } from '../../stores/dashboardStore';
+import { GLUCOSE_HEX } from '../../lib/glucoseColors';
 import type { TimeInRange } from '../../lib/api';
 import type { AlarmThresholds } from '../../stores/dashboardStore';
 
@@ -39,7 +40,7 @@ function buildRanges(t: AlarmThresholds): RangeRow[] {
       targetLabel: 'Menor que 1%',
       targetPct: 1,
       targetOp: '<=',
-      color: '#dc2626',
+      color: GLUCOSE_HEX.veryLow,
       bgColor: 'bg-red-700',
       textColor: 'text-red-700 dark:text-red-400',
       percentKey: 'percentVeryLow',
@@ -52,9 +53,9 @@ function buildRanges(t: AlarmThresholds): RangeRow[] {
       targetLabel: 'Menor que 4%',
       targetPct: 4,
       targetOp: '<=',
-      color: '#f97316',
-      bgColor: 'bg-orange-500',
-      textColor: 'text-orange-500 dark:text-orange-400',
+      color: GLUCOSE_HEX.low,
+      bgColor: 'bg-red-500',
+      textColor: 'text-red-500 dark:text-red-400',
       percentKey: 'percentLow',
       countKey: 'low',
     },
@@ -65,7 +66,7 @@ function buildRanges(t: AlarmThresholds): RangeRow[] {
       targetLabel: 'Maior que 70%',
       targetPct: 70,
       targetOp: '>=',
-      color: '#22c55e',
+      color: GLUCOSE_HEX.inRange,
       bgColor: 'bg-green-500',
       textColor: 'text-green-600 dark:text-green-400',
       percentKey: 'percentInRange',
@@ -78,7 +79,7 @@ function buildRanges(t: AlarmThresholds): RangeRow[] {
       targetLabel: 'Menor que 25%',
       targetPct: 25,
       targetOp: '<=',
-      color: '#f59e0b',
+      color: GLUCOSE_HEX.high,
       bgColor: 'bg-amber-500',
       textColor: 'text-amber-500 dark:text-amber-400',
       percentKey: 'percentHigh',
@@ -91,9 +92,9 @@ function buildRanges(t: AlarmThresholds): RangeRow[] {
       targetLabel: 'Menor que 5%',
       targetPct: 5,
       targetOp: '<=',
-      color: '#dc2626',
-      bgColor: 'bg-red-600',
-      textColor: 'text-red-600 dark:text-red-400',
+      color: GLUCOSE_HEX.veryHigh,
+      bgColor: 'bg-orange-500',
+      textColor: 'text-orange-500 dark:text-orange-400',
       percentKey: 'percentVeryHigh',
       countKey: 'veryHigh',
     },

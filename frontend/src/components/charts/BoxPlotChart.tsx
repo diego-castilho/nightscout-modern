@@ -7,6 +7,7 @@
 import type { DailyPattern } from '../../lib/api';
 import { glucoseZone } from '../../lib/weeklyAggregations';
 import type { GlucoseZone } from '../../lib/weeklyAggregations';
+import { GLUCOSE_HEX } from '../../lib/glucoseColors';
 
 // ── Layout constants ──────────────────────────────────────────────────────────
 
@@ -30,18 +31,16 @@ function yOf(v: number): number {
   return BP_TOP + IH - ((Math.min(Y_MAX, Math.max(Y_MIN, v)) - Y_MIN) / (Y_MAX - Y_MIN)) * IH;
 }
 
-// Hardcoded hex colours are required here because we use them as SVG
-// attribute values AND as hex alpha composites (col + '44').
-// When user-customisable colours land, replace these with
-// getComputedStyle(document.documentElement).getPropertyValue('--glucose-*')
-// at render time.
+// Hex colours from GLUCOSE_HEX (SVG attributes cannot resolve CSS custom
+// properties, so we use the hex equivalents which match index.css vars).
+// Alpha composites use col + '44' (25% opacity) for box fills.
 const ZONE_COLOR: Record<GlucoseZone, string> = {
-  inRange:  '#22c55e',
-  high:     '#f59e0b',
-  veryHigh: '#ef4444',
-  low:      '#f97316',
-  veryLow:  '#dc2626',
-  noData:   '#6b7280',
+  inRange:  GLUCOSE_HEX.inRange,
+  high:     GLUCOSE_HEX.high,
+  veryHigh: GLUCOSE_HEX.veryHigh,
+  low:      GLUCOSE_HEX.low,
+  veryLow:  GLUCOSE_HEX.veryLow,
+  noData:   GLUCOSE_HEX.noData,
 };
 
 // ── Component ─────────────────────────────────────────────────────────────────

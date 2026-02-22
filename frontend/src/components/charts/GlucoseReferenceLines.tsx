@@ -15,30 +15,14 @@ import { ReferenceLine, Label } from 'recharts';
 import { formatGlucose } from '../../lib/glucose';
 
 // ── Zone config ───────────────────────────────────────────────────────────────
-// Semantics: red shades = danger (hypo / severe hyper), amber = warning
-// Dash style: dotted = most critical, dashed = warning, solid = upper warning
+// All threshold lines share the same dotted "3 3" pattern and strokeWidth 1.5
+// so every chart has a consistent visual language. Colours differ per zone.
 
 const ZONE_CONFIG = {
-  veryLow: {
-    color:       'var(--glucose-very-low)',
-    strokeWidth: 1,
-    dashArray:   '2 2',   // dotted — most critical
-  },
-  low: {
-    color:       'var(--glucose-low)',
-    strokeWidth: 1.5,
-    dashArray:   '4 2',   // dashed — hypo warning
-  },
-  high: {
-    color:       'var(--glucose-high)',
-    strokeWidth: 1.5,
-    dashArray:   undefined, // solid — hyperglycaemia warning
-  },
-  veryHigh: {
-    color:       'var(--glucose-very-high)',
-    strokeWidth: 1,
-    dashArray:   '2 2',   // dotted — most critical
-  },
+  veryLow:  { color: 'var(--glucose-very-low)',  strokeWidth: 1.5, dashArray: '3 3' },
+  low:      { color: 'var(--glucose-low)',        strokeWidth: 1.5, dashArray: '3 3' },
+  high:     { color: 'var(--glucose-high)',       strokeWidth: 1.5, dashArray: '3 3' },
+  veryHigh: { color: 'var(--glucose-very-high)', strokeWidth: 1.5, dashArray: '3 3' },
 } as const;
 
 // ── Component ─────────────────────────────────────────────────────────────────

@@ -45,6 +45,7 @@ import { formatGlucose, unitLabel } from '../../lib/glucose';
 import type { GlucoseUnit } from '../../lib/glucose';
 import { computeBuckets } from '../../lib/glucoseDelta';
 import { asyncEffect } from '../../lib/asyncEffect';
+import { GLUCOSE_HEX } from '../../lib/glucoseColors';
 
 interface Props {
   entries: GlucoseEntry[];
@@ -79,13 +80,13 @@ const TREATMENT_VISUAL: Record<string, { color: string; label: string; icon: Luc
   'Basal Insulin':    { color: '#6366f1', label: 'Insulina Basal',      icon: Syringe     },
 };
 
-// TIR zone colors (matching TIRChart)
+// TIR zone colors — sourced from GLUCOSE_HEX (must match index.css vars)
 const ZONE = {
-  veryHigh: '#dc2626',
-  high:     '#f59e0b',
-  inRange:  '#22c55e',
-  low:      '#f97316',
-  veryLow:  '#dc2626',
+  veryHigh: GLUCOSE_HEX.veryHigh,
+  high:     GLUCOSE_HEX.high,
+  inRange:  GLUCOSE_HEX.inRange,
+  low:      GLUCOSE_HEX.low,
+  veryLow:  GLUCOSE_HEX.veryLow,
 };
 
 // Converts a glucose value to a gradient offset (0% = top, 100% = bottom).
