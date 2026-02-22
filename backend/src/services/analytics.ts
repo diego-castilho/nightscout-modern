@@ -435,15 +435,20 @@ export function calculateDistributionStats(
   }
 
   // Histogram — 10 mg/dL bins from 40 to 400
-  const histogram: HistogramBin[] = [];
-  for (let bin = 40; bin < 400; bin += 10) {
-    const count = values.filter((v) => v >= bin && v < bin + 10).length;
-    histogram.push({
-      bin,
-      count,
-      percent: Math.round((count / total) * 1000) / 10,
-    });
+  // Single O(n) pass: compute bin index directly instead of 36 × filter()
+  const HIST_MIN  = 40;
+  const HIST_STEP = 10;
+  const HIST_N    = 36; // (400 - 40) / 10
+  const counts    = new Int32Array(HIST_N);
+  for (const v of values) {
+    const i = Math.floor((v - HIST_MIN) / HIST_STEP);
+    if (i >= 0 && i < HIST_N) counts[i]++;
   }
+  const histogram: HistogramBin[] = Array.from({ length: HIST_N }, (_, i) => ({
+    bin:     HIST_MIN + i * HIST_STEP,
+    count:   counts[i],
+    percent: Math.round((counts[i] / total) * 1000) / 10,
+  }));
 
   return {
     totalReadings: total,

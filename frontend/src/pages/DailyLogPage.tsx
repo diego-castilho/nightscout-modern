@@ -177,11 +177,11 @@ export function DailyLogPage() {
     [entries]
   );
 
-  const hourlyStats = useMemo(() =>
-    Array.from({ length: 24 }, (_, h) => {
-      const vs = entries
-        .filter((e) => new Date(e.date).getHours() === h)
-        .map((e) => e.sgv);
+  const hourlyStats = useMemo(() => {
+    // Single O(n) pass — group by hour, then compute stats
+    const groups: number[][] = Array.from({ length: 24 }, () => []);
+    for (const e of entries) groups[new Date(e.date).getHours()].push(e.sgv);
+    return groups.map((vs, h) => {
       if (vs.length === 0) return { hour: h, count: 0, avg: null as number | null, min: null as number | null, max: null as number | null };
       return {
         hour:  h,
@@ -190,9 +190,8 @@ export function DailyLogPage() {
         min:   Math.min(...vs),
         max:   Math.max(...vs),
       };
-    }),
-    [entries]
-  );
+    });
+  }, [entries]);
 
   // ── Chart config ───────────────────────────────────────────────────────────
   const startTs = new Date(dateStr + 'T00:00:00').getTime();

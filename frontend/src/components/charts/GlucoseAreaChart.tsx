@@ -15,7 +15,7 @@
 // Hover shows a detailed tooltip. Only visible for periods ≤ 24h.
 // ============================================================================
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 import {
   ComposedChart,
   Area,
@@ -344,7 +344,7 @@ function tempBasalColor(treatment: Treatment, scheduledRate: number): string {
   return '#94a3b8';                        // same as scheduled
 }
 
-export function GlucoseAreaChart({ entries, loading }: Props) {
+export const GlucoseAreaChart = memo(function GlucoseAreaChart({ entries, loading }: Props) {
   const { period, unit, alarmThresholds, darkMode, lastRefresh, scheduledBasalRate, predictionsDefault } = useDashboardStore();
 
   // Zoom state
@@ -632,8 +632,7 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
                 fill="url(#glFill)"
                 dot={showDots ? { r: 2.5, strokeWidth: 0 } : false}
                 activeDot={{ r: 5, stroke: '#fff', strokeWidth: 2 }}
-                isAnimationActive={true}
-                animationDuration={600}
+                isAnimationActive={false}
                 connectNulls={false}
               />
 
@@ -768,4 +767,4 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
       </CardContent>
     </Card>
   );
-}
+});

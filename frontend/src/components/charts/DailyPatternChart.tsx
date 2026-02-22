@@ -6,7 +6,7 @@
 // Inclui estatísticas inline: Média, GMI, CV%, % no Alvo.
 // ============================================================================
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 import {
   ComposedChart,
   Area,
@@ -81,7 +81,7 @@ function CustomTooltip({ active, payload, unit }: CustomTooltipProps) {
   );
 }
 
-export function DailyPatternChart() {
+export const DailyPatternChart = memo(function DailyPatternChart() {
   const { period, lastRefresh, alarmThresholds, unit } = useDashboardStore();
   const yTicks = [0, alarmThresholds.veryLow, alarmThresholds.low, alarmThresholds.high, alarmThresholds.veryHigh, 350];
 
@@ -306,4 +306,4 @@ export function DailyPatternChart() {
       </CardContent>
     </Card>
   );
-}
+});

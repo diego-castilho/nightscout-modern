@@ -17,6 +17,10 @@ interface GlucoseDataState {
 
 export function useGlucoseData() {
   const { period, lastRefresh, refreshInterval, alarmThresholds } = useDashboardStore();
+  // Destructure to primitives so useEffect deps are stable — object identity
+  // changes on every store selector call even when values are unchanged.
+  const { veryLow, low, high, veryHigh } = alarmThresholds;
+
   const [state, setState] = useState<GlucoseDataState>({
     entries: [],
     latest: null,
@@ -27,6 +31,7 @@ export function useGlucoseData() {
 
   useEffect(() => {
     let cancelled = false;
+    const thresholds = { veryLow, low, high, veryHigh };
 
     async function fetchData() {
       setState((prev) => ({ ...prev, loading: true, error: null }));
@@ -37,7 +42,7 @@ export function useGlucoseData() {
         const [entriesRes, latestRes, analyticsRes] = await Promise.all([
           getGlucoseRange(startDate, endDate),
           getLatestGlucose(),
-          getAnalytics(startDate, endDate, alarmThresholds),
+          getAnalytics(startDate, endDate, thresholds),
         ]);
 
         if (cancelled) return;
@@ -68,7 +73,7 @@ export function useGlucoseData() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [period, lastRefresh, refreshInterval, alarmThresholds]);
+  }, [period, lastRefresh, refreshInterval, veryLow, low, high, veryHigh]);
 
   return state;
 }

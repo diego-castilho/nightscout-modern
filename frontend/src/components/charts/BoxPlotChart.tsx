@@ -4,6 +4,7 @@
 // Extracted from HourlyStatsPage so it can be tested and reused independently.
 // ============================================================================
 
+import { memo } from 'react';
 import type { DailyPattern } from '../../lib/api';
 import { glucoseZone } from '../../lib/weeklyAggregations';
 import type { GlucoseZone } from '../../lib/weeklyAggregations';
@@ -50,7 +51,7 @@ interface BoxPlotChartProps {
   thresholds: { veryLow: number; low: number; high: number; veryHigh: number };
 }
 
-export function BoxPlotChart({ data, thresholds }: BoxPlotChartProps) {
+export const BoxPlotChart = memo(function BoxPlotChart({ data, thresholds }: BoxPlotChartProps) {
   const yLow      = yOf(thresholds.low);
   const yHigh     = yOf(thresholds.high);
   const yVeryLow  = yOf(thresholds.veryLow);
@@ -191,4 +192,4 @@ export function BoxPlotChart({ data, thresholds }: BoxPlotChartProps) {
       </div>
     </div>
   );
-}
+});

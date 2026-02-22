@@ -11,7 +11,7 @@
 //     busca período anterior ao expandir (comportamento original).
 // ============================================================================
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 import {
   ComposedChart,
   Line,
@@ -116,7 +116,7 @@ function CustomTooltip({ active, payload, unit, labels }: CustomTooltipProps) {
   );
 }
 
-export function ComparisonChart({ fixedPeriod, currentAnalytics }: Props) {
+export const ComparisonChart = memo(function ComparisonChart({ fixedPeriod, currentAnalytics }: Props) {
   const { period: storePeriod, lastRefresh, alarmThresholds, unit } = useDashboardStore();
 
   const period = fixedPeriod ?? storePeriod;
@@ -371,4 +371,4 @@ export function ComparisonChart({ fixedPeriod, currentAnalytics }: Props) {
       )}
     </Card>
   );
-}
+});

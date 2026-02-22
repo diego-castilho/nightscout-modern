@@ -2,6 +2,7 @@
 // TIRChart - Time in Range: stacked bar + international targets table
 // ============================================================================
 
+import { useMemo, memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { toDisplayUnit, unitLabel } from '../../lib/glucose';
 import { useDashboardStore } from '../../stores/dashboardStore';
@@ -126,10 +127,10 @@ function rangeLabel(seg: RangeRow, ul: string): string {
   return `${seg.range} ${ul}`;
 }
 
-export function TIRChart({ tir, loading }: Props) {
+export const TIRChart = memo(function TIRChart({ tir, loading }: Props) {
   const { unit, alarmThresholds } = useDashboardStore();
   const ul = unitLabel(unit);
-  const RANGES = buildRanges(alarmThresholds);
+  const RANGES = useMemo(() => buildRanges(alarmThresholds), [alarmThresholds]);
   if (loading) {
     return (
       <Card>
@@ -230,4 +231,4 @@ export function TIRChart({ tir, loading }: Props) {
       </CardContent>
     </Card>
   );
-}
+});
