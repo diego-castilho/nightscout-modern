@@ -142,8 +142,8 @@ body {
 /* ── Recharts: remove focus outline (decorative charts, not keyboard targets) ── */
 .recharts-wrapper:focus,
 .recharts-wrapper:focus-visible,
-.recharts-wrapper svg:focus,
-.recharts-wrapper svg:focus-visible {
+.recharts-wrapper *:focus,
+.recharts-wrapper *:focus-visible {
   outline: none;
 }
 
