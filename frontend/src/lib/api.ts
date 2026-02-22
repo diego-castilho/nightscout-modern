@@ -426,4 +426,11 @@ export async function login(password: string): Promise<void> {
   localStorage.setItem('authToken', response.data.data.token);
 }
 
+export async function generateAccessToken(): Promise<{ token: string; expiresIn: string }> {
+  const response = await api.post<{ success: boolean; data: { token: string; expiresIn: string } }>(
+    '/auth/generate-token'
+  );
+  return response.data.data;
+}
+
 export default api;

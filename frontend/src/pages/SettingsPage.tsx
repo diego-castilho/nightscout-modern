@@ -7,14 +7,14 @@ import { useDashboardStore } from '../stores/dashboardStore';
 import { fromDisplayUnit, toDisplayUnit, unitLabel } from '../lib/glucose';
 import type { GlucoseUnit } from '../lib/glucose';
 import type { AlarmThresholds } from '../stores/dashboardStore';
-import { saveSettings } from '../lib/api';
+import { saveSettings, generateAccessToken } from '../lib/api';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select } from '../components/ui/select';
 import { Button } from '../components/ui/button';
-import { User, SlidersHorizontal, RefreshCw, RotateCcw, Syringe, Timer, Activity, Calculator } from 'lucide-react';
+import { User, SlidersHorizontal, RefreshCw, RotateCcw, Syringe, Timer, Activity, Calculator, Link2, Copy, Check } from 'lucide-react';
 import { DEFAULT_DEVICE_AGE_THRESHOLDS } from '../lib/deviceAge';
 import type { DeviceAgeThresholds } from '../lib/deviceAge';
 
@@ -133,6 +133,12 @@ export function SettingsPage() {
   const [localName, setLocalName] = useState(patientName);
   const [saved, setSaved] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+
+  // Direct access link state
+  const [directUrl,      setDirectUrl]      = useState<string | null>(null);
+  const [generatingLink, setGeneratingLink] = useState(false);
+  const [linkError,      setLinkError]      = useState<string | null>(null);
+  const [copied,         setCopied]         = useState(false);
 
   // Recalculate displayed thresholds when unit changes
   useEffect(() => {
@@ -292,6 +298,28 @@ export function SettingsPage() {
     setErrors([]);
 
     saveSettings({ alarmThresholds: DEFAULT_THRESHOLDS_MGDL }).catch(() => {});
+  }
+
+  async function handleGenerateLink() {
+    setGeneratingLink(true);
+    setLinkError(null);
+    try {
+      const { token } = await generateAccessToken();
+      const url = new URL(window.location.origin);
+      url.searchParams.set('token', token);
+      setDirectUrl(url.toString());
+    } catch {
+      setLinkError('Erro ao gerar link. Tente novamente.');
+    } finally {
+      setGeneratingLink(false);
+    }
+  }
+
+  async function handleCopyLink() {
+    if (!directUrl) return;
+    await navigator.clipboard.writeText(directUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }
 
   const step = unit === 'mmol' ? '0.1' : '1';
@@ -854,6 +882,65 @@ export function SettingsPage() {
                 Atualizado automaticamente ao registrar uma Nova Caneta Rápida.
               </p>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* ============ ACESSO DIRETO ============ */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Link2 className="h-4 w-4 text-muted-foreground" />
+              Acesso Direto
+            </CardTitle>
+            <CardDescription>
+              Gere um link que abre o dashboard sem precisar fazer login.
+              Válido por 30 dias. Guarde-o em segurança — qualquer pessoa com o link tem acesso total.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {directUrl ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Input
+                    readOnly
+                    value={directUrl}
+                    className="text-xs font-mono"
+                    onFocus={(e) => e.target.select()}
+                  />
+                  <Button variant="outline" size="sm" onClick={handleCopyLink} className="shrink-0">
+                    {copied
+                      ? <Check className="h-4 w-4 text-green-500" />
+                      : <Copy className="h-4 w-4" />
+                    }
+                  </Button>
+                </div>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground">
+                    Expira em 30 dias. Gere um novo para invalidar este.
+                  </p>
+                  <button
+                    onClick={() => setDirectUrl(null)}
+                    className="text-xs text-muted-foreground hover:text-foreground underline"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleGenerateLink}
+                disabled={generatingLink}
+                className="gap-1.5"
+              >
+                <Link2 className="h-3.5 w-3.5" />
+                {generatingLink ? 'Gerando…' : 'Gerar link de acesso'}
+              </Button>
+            )}
+            {linkError && (
+              <p className="text-xs text-destructive">{linkError}</p>
+            )}
           </CardContent>
         </Card>
 

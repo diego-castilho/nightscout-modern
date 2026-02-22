@@ -3,6 +3,7 @@
 // ============================================================================
 
 import { Router } from 'express';
+import jwt from 'jsonwebtoken';
 import glucoseRouter from './glucose.js';
 import analyticsRouter from './analytics.js';
 import settingsRouter from './settings.js';
@@ -121,6 +122,24 @@ router.use('/auth', authRouter);
 
 // All routes below require a valid JWT
 router.use(authenticate);
+
+// POST /api/auth/generate-token — generates a 30-day direct-access token (requires auth)
+router.post('/auth/generate-token', (_req, res) => {
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret) {
+    return res.status(500).json({
+      success: false,
+      error: 'JWT_SECRET not configured',
+      timestamp: new Date().toISOString(),
+    });
+  }
+  const token = jwt.sign({ role: 'owner', type: 'direct-access' }, jwtSecret, { expiresIn: '30d' });
+  return res.json({
+    success: true,
+    data: { token, expiresIn: '30d' },
+    timestamp: new Date().toISOString(),
+  });
+});
 
 // Protected route modules
 router.use('/glucose', glucoseRouter);

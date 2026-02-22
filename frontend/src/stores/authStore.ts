@@ -12,6 +12,18 @@ interface AuthState {
   logout: () => void;
 }
 
+// Read ?token= from URL before React renders, so ProtectedRoute sees it immediately
+(function consumeUrlToken() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('token');
+  if (!token) return;
+  localStorage.setItem('authToken', token);
+  // Remove token from URL to avoid leaking it in history/clipboard
+  const clean = new URL(window.location.href);
+  clean.searchParams.delete('token');
+  window.history.replaceState({}, '', clean.toString());
+})();
+
 export const useAuthStore = create<AuthState>((set) => ({
   // Initialise from localStorage so page reloads keep the session
   isAuthenticated: !!localStorage.getItem('authToken'),
