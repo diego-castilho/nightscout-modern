@@ -7,7 +7,7 @@ import { format, startOfMonth, endOfMonth, getDaysInMonth, getDay, isToday, isFu
 import { ptBR } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, AlertTriangle, CalendarDays } from 'lucide-react';
 import {
-  AreaChart, Area, ReferenceLine, ResponsiveContainer, Tooltip, XAxis,
+  AreaChart, Area, ResponsiveContainer, Tooltip, XAxis,
 } from 'recharts';
 
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -16,6 +16,7 @@ import { useDashboardStore } from '../stores/dashboardStore';
 import { getCalendarData, getGlucoseRange } from '../lib/api';
 import type { CalendarDayData, GlucoseEntry } from '../lib/api';
 import { formatGlucose, unitLabel } from '../lib/glucose';
+import { GlucoseReferenceLines } from '../components/charts/GlucoseReferenceLines';
 
 // ============================================================================
 // Helpers de cor por zona
@@ -432,8 +433,7 @@ export function CalendarPage() {
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     <DayTooltip active={active} payload={payload as any} unit={unit} />
                   )} />
-                  <ReferenceLine y={alarmThresholds.high} stroke="#f59e0b" strokeDasharray="3 3" strokeWidth={1} />
-                  <ReferenceLine y={alarmThresholds.low}  stroke="#f97316" strokeDasharray="3 3" strokeWidth={1} />
+                  <GlucoseReferenceLines thresholds={alarmThresholds} unit={unit} which={['low', 'high']} showLabels={false} />
                   <Area
                     type="monotone"
                     dataKey="sgv"

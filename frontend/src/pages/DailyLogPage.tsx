@@ -25,33 +25,8 @@ import { getGlucoseRange, getTreatments } from '../lib/api';
 import type { GlucoseEntry, Treatment } from '../lib/api';
 import type { AlarmThresholds } from '../stores/dashboardStore';
 import { formatGlucose, unitLabel } from '../lib/glucose';
-
-// ============================================================================
-// Constants & helpers
-// ============================================================================
-
-const RAPID_TYPES = new Set([
-  'Meal Bolus', 'Snack Bolus', 'Correction Bolus', 'Combo Bolus',
-]);
-const SLOW_TYPES = new Set(['Basal Insulin']);
-
-function treatmentCategory(t: Treatment): 'rapid' | 'slow' | 'carbs' | 'other' {
-  if (RAPID_TYPES.has(t.eventType)) return 'rapid';
-  if (SLOW_TYPES.has(t.eventType))  return 'slow';
-  if ((t.carbs ?? 0) > 0)           return 'carbs';
-  return 'other';
-}
-
-function treatmentLabel(t: Treatment): string {
-  const cat = treatmentCategory(t);
-  if (cat === 'rapid') {
-    const dose = (t.insulin ?? 0) + (t.immediateInsulin ?? 0) + (t.extendedInsulin ?? 0);
-    return dose > 0 ? `${Math.round(dose * 10) / 10}U` : '';
-  }
-  if (cat === 'slow')  return t.insulin ? `${t.insulin}U` : '';
-  if (cat === 'carbs') return t.carbs   ? `${t.carbs}g`   : '';
-  return '';
-}
+import { RAPID_TYPES, SLOW_TYPES, treatmentCategory, treatmentLabel } from '../lib/treatments';
+import { GlucoseReferenceLines } from '../components/charts/GlucoseReferenceLines';
 
 const CAT_COLOR: Record<string, string> = {
   rapid: '#3b82f6',
@@ -414,18 +389,7 @@ export function DailyLogPage() {
                       <ChartTooltip active={active} payload={payload as any} unit={unit} />
                     )} />
                     {/* Threshold lines */}
-                    <ReferenceLine
-                      y={alarmThresholds.low}
-                      stroke="#f97316"
-                      strokeDasharray="4 2"
-                      strokeWidth={1.5}
-                    />
-                    <ReferenceLine
-                      y={alarmThresholds.high}
-                      stroke="#f59e0b"
-                      strokeDasharray="4 2"
-                      strokeWidth={1.5}
-                    />
+                    <GlucoseReferenceLines thresholds={alarmThresholds} unit={unit} which={['low', 'high']} showLabels={false} />
                     {/* Treatment annotations */}
                     {treatmentLines}
                     {/* Glucose area */}

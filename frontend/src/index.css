@@ -54,6 +54,15 @@
 
 /* ── CSS Variables — Light ─────────────────────────────────────────────────── */
 :root {
+  /* ── Glucose zone colours ─────────────────────────────────────────────── */
+  /* Single source of truth. Override via JS for user-customisable themes.  */
+  --glucose-very-low:  oklch(50.5% 0.213  27.518);  /* Red 700    */
+  --glucose-low:       oklch(63.7% 0.237  25.331);  /* Red 500    */
+  --glucose-in-range:  oklch(72.3% 0.219 149.579);  /* Green 500  */
+  --glucose-high:      oklch(76.9% 0.188  70.08);   /* Amber 500  */
+  --glucose-very-high: oklch(70.5% 0.213  47.604);  /* Orange 500 */
+  --glucose-no-data:   oklch(55.1% 0.023 264.364);  /* Zinc 500   */
+
   --background: 0 0% 100%;
   --foreground: 222.2 84% 4.9%;
   --card: 0 0% 100%;

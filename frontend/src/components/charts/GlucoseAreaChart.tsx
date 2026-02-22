@@ -43,6 +43,8 @@ import { useDashboardStore, getPeriodDates, type Period, type AlarmThresholds } 
 import { getTrendArrow, timeAgo } from '../../lib/utils';
 import { formatGlucose, unitLabel } from '../../lib/glucose';
 import type { GlucoseUnit } from '../../lib/glucose';
+import { computeBuckets } from '../../lib/glucoseDelta';
+import { asyncEffect } from '../../lib/asyncEffect';
 
 interface Props {
   entries: GlucoseEntry[];
@@ -141,9 +143,7 @@ const BG_REF = 140;
 const BG_MIN = 36;
 const BG_MAX = 400;
 const AR_COEF = [-0.723, 1.716] as const;
-const AR2_STEP_MS      = 5 * 60_000;
-const AR2_BUCKET_OFFSET = 2.5 * 60_000;
-const AR2_BUCKET_SIZE   = 5.0 * 60_000;
+const AR2_STEP_MS = 5 * 60_000;
 
 function calculateAR2(
   entries: GlucoseEntry[],
@@ -159,13 +159,7 @@ function calculateAR2(
   const bucketMean = (arr: GlucoseEntry[]) =>
     arr.reduce((s, e) => s + e.sgv, 0) / arr.length;
 
-  const recentBucket = entries.filter(
-    e => e.date >= latest.date - AR2_BUCKET_OFFSET && e.date <= latest.date + AR2_BUCKET_OFFSET
-  );
-  const prevBucket = entries.filter(
-    e => e.date >= latest.date - AR2_BUCKET_OFFSET - AR2_BUCKET_SIZE &&
-         e.date <  latest.date - AR2_BUCKET_OFFSET
-  );
+  const { recent: recentBucket, prev: prevBucket } = computeBuckets(entries, latest);
 
   if (!recentBucket.length || !prevBucket.length) return [];
 
@@ -389,12 +383,15 @@ export function GlucoseAreaChart({ entries, loading }: Props) {
 
   useEffect(() => {
     if (!showTreatments) { setTreatments([]); return; }
-    let cancelled = false;
-    const { startDate, endDate } = getPeriodDates(period as Period);
-    getTreatments({ startDate, endDate, limit: 500 })
-      .then((data) => { if (!cancelled) setTreatments(data ?? []); })
-      .catch(() => { if (!cancelled) setTreatments([]); });
-    return () => { cancelled = true; };
+    return asyncEffect(async (sig) => {
+      const { startDate, endDate } = getPeriodDates(period as Period);
+      try {
+        const data = await getTreatments({ startDate, endDate, limit: 500 });
+        if (!sig.cancelled) setTreatments(data ?? []);
+      } catch {
+        if (!sig.cancelled) setTreatments([]);
+      }
+    });
   }, [period, lastRefresh, showTreatments]);
 
   const resetZoom = () => setZoomedDomain(null);

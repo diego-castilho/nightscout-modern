@@ -15,15 +15,14 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ReferenceLine,
   ResponsiveContainer,
-  Label,
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { getAnalytics } from '../../lib/api';
 import type { DailyPattern, GlucoseStats, TimeInRange } from '../../lib/api';
 import { useDashboardStore, getPeriodDates, type Period } from '../../stores/dashboardStore';
 import { formatGlucose, unitLabel } from '../../lib/glucose';
+import { GlucoseReferenceLines } from './GlucoseReferenceLines';
 
 // Periods that use the selected date range (richer AGP patterns)
 const LONG_PERIODS: Period[] = ['7d', '14d', '30d'];
@@ -266,18 +265,7 @@ export function DailyPatternChart() {
             <Tooltip content={<CustomTooltip unit={unit} />} />
 
             {/* Target range reference lines */}
-            <ReferenceLine y={alarmThresholds.veryHigh} stroke="#f59e0b" strokeDasharray="3 3" strokeWidth={1}>
-              <Label value={formatGlucose(alarmThresholds.veryHigh, unit)} position="right" fontSize={10} fill="#f59e0b" offset={4} />
-            </ReferenceLine>
-            <ReferenceLine y={alarmThresholds.high} stroke="#22c55e" strokeWidth={1.5}>
-              <Label value={formatGlucose(alarmThresholds.high, unit)} position="right" fontSize={10} fill="#22c55e" offset={4} />
-            </ReferenceLine>
-            <ReferenceLine y={alarmThresholds.low} stroke="#22c55e" strokeWidth={1.5}>
-              <Label value={formatGlucose(alarmThresholds.low, unit)} position="right" fontSize={10} fill="#22c55e" offset={4} />
-            </ReferenceLine>
-            <ReferenceLine y={alarmThresholds.veryLow} stroke="#f97316" strokeDasharray="3 3" strokeWidth={1}>
-              <Label value={formatGlucose(alarmThresholds.veryLow, unit)} position="right" fontSize={10} fill="#f97316" offset={4} />
-            </ReferenceLine>
+            <GlucoseReferenceLines thresholds={alarmThresholds} unit={unit} />
 
             {/* ── Stacked percentile bands (bottom → top) ────────────── */}
             <Area type="monotone" dataKey="p5_base"    stackId="bands" stroke="none" fill="transparent"           isAnimationActive={false} legendType="none" />

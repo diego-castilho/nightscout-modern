@@ -11,6 +11,7 @@ import { formatGlucose as fmtGlucose, unitLabel } from '../../lib/glucose';
 import { useDashboardStore } from '../../stores/dashboardStore';
 import type { AlarmThresholds } from '../../stores/dashboardStore';
 import type { GlucoseEntry } from '../../lib/api';
+import { calcNSDelta } from '../../lib/glucoseDelta';
 import { useIOB } from '../../hooks/useIOB';
 import { useCOB } from '../../hooks/useCOB';
 import { useDeviceAges } from '../../hooks/useDeviceAges';
@@ -21,31 +22,6 @@ interface Props {
   previous?: GlucoseEntry | null;
   entries?: GlucoseEntry[];
   loading: boolean;
-}
-
-// Mirrors Nightscout bgnow.js calcDelta with bucket averaging.
-// Recent bucket  = [latest - 2.5min, latest + 2.5min]
-// Previous bucket = [latest - 7.5min, latest - 2.5min]
-// When gap > 9 min between bucket centers, interpolates to 5-min equivalent.
-function calcNSDelta(latest: GlucoseEntry, entries: GlucoseEntry[]): number | undefined {
-  const OFFSET = 2.5 * 60_000;
-  const BUCKET = 5.0 * 60_000;
-
-  const recentBucket = entries.filter(e => e.date >= latest.date - OFFSET && e.date <= latest.date + OFFSET);
-  const prevBucket   = entries.filter(e => e.date >= latest.date - OFFSET - BUCKET && e.date < latest.date - OFFSET);
-
-  if (!recentBucket.length || !prevBucket.length) return undefined;
-
-  const mean = (arr: GlucoseEntry[]) => arr.reduce((s, e) => s + e.sgv, 0) / arr.length;
-  const recentMean = mean(recentBucket);
-  const prevMean   = mean(prevBucket);
-
-  const elapsedMins = (Math.max(...recentBucket.map(e => e.date)) - Math.max(...prevBucket.map(e => e.date))) / 60_000;
-  const absolute    = recentMean - prevMean;
-
-  return elapsedMins > 9
-    ? Math.round(absolute / elapsedMins * 5)
-    : Math.round(absolute);
 }
 
 const LEVEL_CONFIG = {

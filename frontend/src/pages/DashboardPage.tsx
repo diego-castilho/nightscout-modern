@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useGlucoseData } from '../hooks/useGlucoseData';
 import { useDashboardStore, getPeriodDates } from '../stores/dashboardStore';
 import { detectPatterns } from '../lib/api';
+import { asyncEffect } from '../lib/asyncEffect';
 import { formatGlucose, unitLabel } from '../lib/glucose';
 import type { DetectedPattern } from '../lib/api';
 
@@ -62,25 +63,16 @@ export function DashboardPage() {
 
   // Fetch detected patterns separately (can be slow)
   useEffect(() => {
-    let cancelled = false;
     setPatternsLoading(true);
-
-    const { startDate, endDate } = getPeriodDates(period);
-    detectPatterns(startDate, endDate)
-      .then((data) => {
-        if (!cancelled) {
-          setPatterns(data ?? []);
-          setPatternsLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setPatterns([]);
-          setPatternsLoading(false);
-        }
-      });
-
-    return () => { cancelled = true; };
+    return asyncEffect(async (sig) => {
+      const { startDate, endDate } = getPeriodDates(period);
+      try {
+        const data = await detectPatterns(startDate, endDate);
+        if (!sig.cancelled) { setPatterns(data ?? []); setPatternsLoading(false); }
+      } catch {
+        if (!sig.cancelled) { setPatterns([]); setPatternsLoading(false); }
+      }
+    });
   }, [period, lastRefresh]);
 
   const lastUpdated = latest ? new Date(latest.date) : null;

@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   format, startOfISOWeek, addDays, subWeeks, addWeeks,
-  startOfDay, endOfDay, isSameWeek, parseISO,
+  endOfDay, isSameWeek, parseISO,
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, CalendarRange } from 'lucide-react';
@@ -15,32 +15,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button';
 import { useDashboardStore } from '../stores/dashboardStore';
 import { getGlucoseRange, getTreatments } from '../lib/api';
-import type { GlucoseEntry, Treatment } from '../lib/api';
 import { formatGlucose, unitLabel } from '../lib/glucose';
-
-// ============================================================================
-// Types
-// ============================================================================
-
-type GlucoseZone = 'veryLow' | 'low' | 'inRange' | 'high' | 'veryHigh' | 'noData';
-
-interface WeeklyDaySummary {
-  date: string;
-  weekday: string;
-  isFutureDay: boolean;
-  hasGlucoseData: boolean;
-  avgGlucose: number;
-  minGlucose: number;
-  maxGlucose: number;
-  zone: GlucoseZone;
-  tirPercent: number;
-  hypoCount: number;
-  sparkline: { t: number; v: number }[];
-  totalCarbs: number;
-  totalRapidInsulin: number;
-  totalSlowInsulin: number;
-  hasTreatmentData: boolean;
-}
+import {
+  aggregateWeek,
+  type GlucoseZone,
+  type WeeklyDaySummary,
+} from '../lib/weeklyAggregations';
 
 interface WeekTotals {
   avgGlucose: number | null;
@@ -54,22 +34,6 @@ interface WeekTotals {
 // ============================================================================
 // Constants & helpers
 // ============================================================================
-
-const WEEKDAYS_SHORT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-
-const RAPID_BOLUS_TYPES = ['Meal Bolus', 'Snack Bolus', 'Correction Bolus'];
-const SLOW_BOLUS_TYPES  = ['Basal Insulin'];
-
-function glucoseZone(
-  avg: number,
-  t: { veryLow: number; low: number; high: number; veryHigh: number },
-): GlucoseZone {
-  if (avg < t.veryLow)   return 'veryLow';
-  if (avg < t.low)       return 'low';
-  if (avg <= t.high)     return 'inRange';
-  if (avg <= t.veryHigh) return 'high';
-  return 'veryHigh';
-}
 
 const ZONE_AVG_TEXT: Record<GlucoseZone, string> = {
   inRange:  'text-green-700 dark:text-green-400',
@@ -167,96 +131,6 @@ function Sparkline({
   );
 }
 
-// ============================================================================
-// Data aggregation (frontend — sem chamada extra ao backend)
-// ============================================================================
-
-function aggregateWeek(
-  entries: GlucoseEntry[],
-  treatments: Treatment[],
-  weekStart: Date,
-  thresholds: { veryLow: number; low: number; high: number; veryHigh: number },
-): WeeklyDaySummary[] {
-  return Array.from({ length: 7 }, (_, i) => {
-    const dayStart = startOfDay(addDays(weekStart, i));
-    const dayEnd   = endOfDay(dayStart);
-    const dateStr  = format(dayStart, 'yyyy-MM-dd');
-    const weekday  = WEEKDAYS_SHORT[dayStart.getDay()];
-    const dayIsFuture = dayStart > new Date();
-
-    const dayEntries = entries
-      .filter(e => e.date >= dayStart.getTime() && e.date <= dayEnd.getTime())
-      .sort((a, b) => a.date - b.date);
-
-    const dayTreatments = treatments.filter(t => {
-      const tTime = new Date(t.created_at).getTime();
-      return tTime >= dayStart.getTime() && tTime <= dayEnd.getTime();
-    });
-
-    let totalCarbs = 0;
-    let totalRapidInsulin = 0;
-    let totalSlowInsulin  = 0;
-    for (const t of dayTreatments) {
-      if (t.carbs) totalCarbs += t.carbs;
-      if (RAPID_BOLUS_TYPES.includes(t.eventType)) {
-        totalRapidInsulin += t.insulin ?? 0;
-      } else if (t.eventType === 'Combo Bolus') {
-        totalRapidInsulin += (t.immediateInsulin ?? 0) + (t.extendedInsulin ?? 0);
-      } else if (SLOW_BOLUS_TYPES.includes(t.eventType)) {
-        totalSlowInsulin += t.insulin ?? 0;
-      }
-    }
-
-    const round1 = (n: number) => Math.round(n * 10) / 10;
-
-    if (dayEntries.length === 0) {
-      return {
-        date: dateStr,
-        weekday,
-        isFutureDay: dayIsFuture,
-        hasGlucoseData: false,
-        avgGlucose: 0,
-        minGlucose: 0,
-        maxGlucose: 0,
-        zone: 'noData' as GlucoseZone,
-        tirPercent: 0,
-        hypoCount: 0,
-        sparkline: [],
-        totalCarbs: round1(totalCarbs),
-        totalRapidInsulin: round1(totalRapidInsulin),
-        totalSlowInsulin: round1(totalSlowInsulin),
-        hasTreatmentData: dayTreatments.length > 0,
-      };
-    }
-
-    const sgvs         = dayEntries.map(e => e.sgv);
-    const avg          = Math.round(sgvs.reduce((a, b) => a + b, 0) / sgvs.length);
-    const min          = Math.min(...sgvs);
-    const max          = Math.max(...sgvs);
-    const inRangeCount = dayEntries.filter(e => e.sgv >= thresholds.low && e.sgv <= thresholds.high).length;
-    const tirPercent   = Math.round((inRangeCount / dayEntries.length) * 100);
-    const hypoCount    = dayEntries.filter(e => e.sgv < thresholds.low).length;
-    const zone         = glucoseZone(avg, thresholds);
-
-    return {
-      date: dateStr,
-      weekday,
-      isFutureDay: dayIsFuture,
-      hasGlucoseData: true,
-      avgGlucose: avg,
-      minGlucose: min,
-      maxGlucose: max,
-      zone,
-      tirPercent,
-      hypoCount,
-      sparkline: dayEntries.map(e => ({ t: e.date, v: e.sgv })),
-      totalCarbs: round1(totalCarbs),
-      totalRapidInsulin: round1(totalRapidInsulin),
-      totalSlowInsulin: round1(totalSlowInsulin),
-      hasTreatmentData: dayTreatments.length > 0,
-    };
-  });
-}
 
 function computeTotals(days: WeeklyDaySummary[]): WeekTotals {
   const withData = days.filter(d => d.hasGlucoseData);

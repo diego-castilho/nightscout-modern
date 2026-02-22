@@ -19,9 +19,7 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ReferenceLine,
   ResponsiveContainer,
-  Label,
 } from 'recharts';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -29,6 +27,8 @@ import { getAnalytics } from '../../lib/api';
 import type { GlucoseAnalytics } from '../../lib/api';
 import { useDashboardStore, getPeriodDates, type Period } from '../../stores/dashboardStore';
 import { formatGlucose, unitLabel } from '../../lib/glucose';
+import { GlucoseReferenceLines } from './GlucoseReferenceLines';
+import { asyncEffect } from '../../lib/asyncEffect';
 
 // Period labels and previous-period calculation
 const PERIOD_MS: Record<string, number> = {
@@ -141,35 +141,31 @@ export function ComparisonChart({ fixedPeriod, currentAnalytics }: Props) {
   // Standalone mode: fetch current period
   useEffect(() => {
     if (!isStandalone) return;
-    let cancelled = false;
     setLoadingCurrent(true);
-    const { startDate, endDate } = getPeriodDates(period as Period);
-    getAnalytics(startDate, endDate, alarmThresholds)
-      .then((data) => {
-        if (!cancelled) { setCurrentAnalyticsLocal(data ?? null); setLoadingCurrent(false); }
-      })
-      .catch(() => {
-        if (!cancelled) { setCurrentAnalyticsLocal(null); setLoadingCurrent(false); }
-      });
-    return () => { cancelled = true; };
+    return asyncEffect(async (sig) => {
+      const { startDate, endDate } = getPeriodDates(period as Period);
+      try {
+        const data = await getAnalytics(startDate, endDate, alarmThresholds);
+        if (!sig.cancelled) { setCurrentAnalyticsLocal(data ?? null); setLoadingCurrent(false); }
+      } catch {
+        if (!sig.cancelled) { setCurrentAnalyticsLocal(null); setLoadingCurrent(false); }
+      }
+    });
   }, [isStandalone, period, alarmThresholds, lastRefresh]);
 
   // Fetch previous period analytics (dashboard: only when expanded; standalone: always)
   useEffect(() => {
     if (!isExpanded) return;
-    let cancelled = false;
     setLoadingPrev(true);
-
-    const { startDate, endDate } = getPrevDates(period as Period);
-    getAnalytics(startDate, endDate, alarmThresholds)
-      .then((data) => {
-        if (!cancelled) { setPrevAnalytics(data ?? null); setLoadingPrev(false); }
-      })
-      .catch(() => {
-        if (!cancelled) { setPrevAnalytics(null); setLoadingPrev(false); }
-      });
-
-    return () => { cancelled = true; };
+    return asyncEffect(async (sig) => {
+      const { startDate, endDate } = getPrevDates(period as Period);
+      try {
+        const data = await getAnalytics(startDate, endDate, alarmThresholds);
+        if (!sig.cancelled) { setPrevAnalytics(data ?? null); setLoadingPrev(false); }
+      } catch {
+        if (!sig.cancelled) { setPrevAnalytics(null); setLoadingPrev(false); }
+      }
+    });
   }, [period, lastRefresh, isExpanded, alarmThresholds]);
 
   if (!labels) return null; // Only for 24h/7d/14d/30d
@@ -328,15 +324,7 @@ export function ComparisonChart({ fixedPeriod, currentAnalytics }: Props) {
                   <Tooltip content={<CustomTooltip unit={unit} labels={labels} />} />
 
                   {/* Reference lines */}
-                  <ReferenceLine y={alarmThresholds.high} stroke="#22c55e" strokeWidth={1.5}>
-                    <Label value={formatGlucose(alarmThresholds.high, unit)} position="right" fontSize={10} fill="#22c55e" offset={4} />
-                  </ReferenceLine>
-                  <ReferenceLine y={alarmThresholds.low} stroke="#22c55e" strokeWidth={1.5}>
-                    <Label value={formatGlucose(alarmThresholds.low, unit)} position="right" fontSize={10} fill="#22c55e" offset={4} />
-                  </ReferenceLine>
-                  <ReferenceLine y={alarmThresholds.veryLow} stroke="#f97316" strokeDasharray="3 3" strokeWidth={1}>
-                    <Label value={formatGlucose(alarmThresholds.veryLow, unit)} position="right" fontSize={10} fill="#f97316" offset={4} />
-                  </ReferenceLine>
+                  <GlucoseReferenceLines thresholds={alarmThresholds} unit={unit} which={['veryLow', 'low', 'high']} />
 
                   {/* Previous period — dashed gray */}
                   <Line

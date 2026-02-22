@@ -14,7 +14,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ReferenceLine,
   ResponsiveContainer,
 } from 'recharts';
 
@@ -25,6 +24,7 @@ import { getGlucoseRange } from '../lib/api';
 import type { GlucoseEntry } from '../lib/api';
 import { formatGlucose, unitLabel } from '../lib/glucose';
 import { PERIOD_OPTIONS } from '../lib/periods';
+import { GlucoseReferenceLines } from '../components/charts/GlucoseReferenceLines';
 
 // ============================================================================
 // Constants
@@ -460,30 +460,7 @@ export function SpaghettiPage() {
                         />
                       )}
                     />
-                    <ReferenceLine
-                      y={low}
-                      stroke="#f97316"
-                      strokeDasharray="4 2"
-                      strokeWidth={1.5}
-                      label={{
-                        value: formatGlucose(low, unit),
-                        position: 'right',
-                        fontSize: 10,
-                        fill: '#f97316',
-                      }}
-                    />
-                    <ReferenceLine
-                      y={high}
-                      stroke="#16a34a"
-                      strokeDasharray="4 2"
-                      strokeWidth={1.5}
-                      label={{
-                        value: formatGlucose(high, unit),
-                        position: 'right',
-                        fontSize: 10,
-                        fill: '#16a34a',
-                      }}
-                    />
+                    <GlucoseReferenceLines thresholds={alarmThresholds} unit={unit} which={['low', 'high']} />
                     {days.map((day, i) => (
                       <Line
                         key={format(day, 'yyyy-MM-dd')}
