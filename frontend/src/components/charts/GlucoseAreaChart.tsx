@@ -15,7 +15,7 @@
 // Hover shows a detailed tooltip. Only visible for periods ≤ 24h.
 // ============================================================================
 
-import { useState, useEffect, memo } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import {
   ComposedChart,
   Area,
@@ -56,6 +56,9 @@ interface ChartPoint {
   time: number;
   sgv?: number | null;
   sgvPredicted?: number | null;
+  sgvPredUpper?: number | null;      // actual glucose upper bound (for Y-axis max)
+  sgvPredLower?: number | null;      // actual glucose lower bound (Recharts base area)
+  sgvPredBandHeight?: number | null; // = upper − lower (Recharts stacked band height)
   direction?: string;
   trend?: number;
 }
@@ -146,48 +149,93 @@ const BG_MAX = 400;
 const AR_COEF = [-0.723, 1.716] as const;
 const AR2_STEP_MS = 5 * 60_000;
 
-function calculateAR2(
-  entries: GlucoseEntry[],
-  steps = 12
-): Array<{ time: number; sgvPredicted: number }> {
-  if (entries.length < 2) return [];
+// Cone-of-uncertainty constants (mirrors Nightscout ar2.js forecastCone)
+const CONE_FACTOR = 2;
+// Empirical uncertainty growth per 5-min step — 12 steps = 60 min of prediction
+const CONE_STEPS = [0.020, 0.041, 0.061, 0.081, 0.099, 0.116, 0.132, 0.146, 0.159, 0.171, 0.182, 0.192] as const;
+
+// Quality thresholds for avgLoss — used by future alarm module
+export const AR2_QUALITY_WARN   = 0.05;
+export const AR2_QUALITY_URGENT = 0.10;
+
+interface AR2Prediction {
+  time: number;
+  sgvPredicted: number;
+  sgvPredUpper: number;
+  sgvPredLower: number;
+}
+
+interface AR2Result {
+  predictions: AR2Prediction[];
+  /** Mean squared log-error of AR2 over last ≤8 readings (model fit quality).
+   *  WARN if > AR2_QUALITY_WARN, URGENT if > AR2_QUALITY_URGENT. null if insufficient data. */
+  avgLoss: number | null;
+}
+
+function calculateAR2(entries: GlucoseEntry[], steps = 12): AR2Result {
+  const empty: AR2Result = { predictions: [], avgLoss: null };
+  if (entries.length < 2) return empty;
 
   const sorted = [...entries].sort((a, b) => b.date - a.date);
   const latest = sorted[0];
 
-  if (Date.now() - latest.date > 10 * 60_000) return [];
+  if (Date.now() - latest.date > 10 * 60_000) return empty;
 
   const bucketMean = (arr: GlucoseEntry[]) =>
     arr.reduce((s, e) => s + e.sgv, 0) / arr.length;
 
   const { recent: recentBucket, prev: prevBucket } = computeBuckets(entries, latest);
 
-  if (!recentBucket.length || !prevBucket.length) return [];
+  if (!recentBucket.length || !prevBucket.length) return empty;
 
   const bgnowMean    = bucketMean(recentBucket);
   const mean5MinsAgo = bucketMean(prevBucket);
 
-  if (bgnowMean < BG_MIN || mean5MinsAgo < BG_MIN) return [];
+  if (bgnowMean < BG_MIN || mean5MinsAgo < BG_MIN) return empty;
+
+  // avgLoss: mean squared log-error of AR2 back-tested on last ≤8 valid readings.
+  // Measures how well the model fits recent data — high loss → noisy / unreliable.
+  let avgLoss: number | null = null;
+  {
+    const recent = [...entries]
+      .filter((e) => e.sgv >= BG_MIN)
+      .sort((a, b) => a.date - b.date)
+      .slice(-8);
+    if (recent.length >= 3) {
+      let totalLoss = 0;
+      for (let j = 2; j < recent.length; j++) {
+        const pLog = Math.log(recent[j - 2].sgv / BG_REF);
+        const cLog = Math.log(recent[j - 1].sgv / BG_REF);
+        const predictedLog = AR_COEF[0] * pLog + AR_COEF[1] * cLog;
+        const actualLog    = Math.log(recent[j].sgv / BG_REF);
+        totalLoss += Math.pow(predictedLog - actualLog, 2);
+      }
+      avgLoss = totalLoss / (recent.length - 2);
+    }
+  }
 
   // Initialize in log space (mirrors NS initAR2)
   let prev = Math.log(mean5MinsAgo / BG_REF);
   let curr = Math.log(bgnowMean    / BG_REF);
   let forecastTime = latest.date;
 
-  const predictions: Array<{ time: number; sgvPredicted: number }> = [];
+  const predictions: AR2Prediction[] = [];
 
-  for (let i = 1; i <= steps; i++) {
+  for (let i = 0; i < steps; i++) {
     forecastTime += AR2_STEP_MS;
     const nextCurr = AR_COEF[0] * prev + AR_COEF[1] * curr;
-    const mgdl = Math.max(BG_MIN, Math.min(BG_MAX,
-      Math.round(BG_REF * Math.exp(nextCurr))
-    ));
-    predictions.push({ time: forecastTime, sgvPredicted: mgdl });
+
+    const mgdl  = Math.max(BG_MIN, Math.min(BG_MAX, Math.round(BG_REF * Math.exp(nextCurr))));
+    const cStep = CONE_STEPS[i] ?? CONE_STEPS[CONE_STEPS.length - 1];
+    const upper = Math.min(BG_MAX, Math.round(BG_REF * Math.exp(nextCurr + CONE_FACTOR * cStep)));
+    const lower = Math.max(BG_MIN, Math.round(BG_REF * Math.exp(nextCurr - CONE_FACTOR * cStep)));
+
+    predictions.push({ time: forecastTime, sgvPredicted: mgdl, sgvPredUpper: upper, sgvPredLower: lower });
     prev = curr;
     curr = nextCurr;
   }
 
-  return predictions;
+  return { predictions, avgLoss };
 }
 
 // X-axis tick config per period
@@ -362,6 +410,10 @@ export const GlucoseAreaChart = memo(function GlucoseAreaChart({ entries, loadin
   // Prediction toggle — initialized from user's default preference
   const [predictionsEnabled, setPredictionsEnabled] = useState(predictionsDefault);
 
+  // AR2 quality metric — persisted here for future alarm module consumption
+  // Thresholds: AR2_QUALITY_WARN (0.05) and AR2_QUALITY_URGENT (0.10)
+  const ar2AvgLossRef = useRef<number | null>(null);
+
   // Treatment markers state
   const [treatments, setTreatments] = useState<Treatment[]>([]);
   const [treatmentTooltip, setTreatmentTooltip] = useState<{
@@ -434,10 +486,29 @@ export const GlucoseAreaChart = memo(function GlucoseAreaChart({ entries, loadin
   let chartData: ChartPoint[] = data.map((d) => ({ ...d }));
 
   if (showPredictions && data.length >= 2) {
-    const predPoints = calculateAR2(entries);
+    const { predictions: predPoints, avgLoss: loss } = calculateAR2(entries);
+    ar2AvgLossRef.current = loss;
     if (predPoints.length > 0) {
+      // Bridge: mark the last actual reading as the cone origin (zero width)
+      // so the prediction line/band connects visually to the glucose curve.
+      const lastActual = chartData[chartData.length - 1];
+      if (lastActual.sgv != null) {
+        chartData[chartData.length - 1] = {
+          ...lastActual,
+          sgvPredicted:      lastActual.sgv,
+          sgvPredUpper:      lastActual.sgv,
+          sgvPredLower:      lastActual.sgv,
+          sgvPredBandHeight: 0,
+        };
+      }
       predPoints.forEach((p) =>
-        chartData.push({ time: p.time, sgvPredicted: p.sgvPredicted })
+        chartData.push({
+          time:              p.time,
+          sgvPredicted:      p.sgvPredicted,
+          sgvPredUpper:      p.sgvPredUpper,
+          sgvPredLower:      p.sgvPredLower,
+          sgvPredBandHeight: p.sgvPredUpper - p.sgvPredLower,
+        })
       );
     }
   }
@@ -448,11 +519,15 @@ export const GlucoseAreaChart = memo(function GlucoseAreaChart({ entries, loadin
     : chartData;
   const displayData = visibleData.length > 0 ? visibleData : chartData;
 
-  // Y axis adapts to visible range
-  const allSgv = displayData.flatMap((d) => [d.sgv, d.sgvPredicted]).filter((v): v is number => v != null);
-  const rawMin = allSgv.length > 0 ? Math.min(...allSgv) : 70;
-  const rawMax = allSgv.length > 0 ? Math.max(...allSgv) : 180;
-  const minVal = Math.max(0, rawMin - 20);
+  // Y axis: always starts at 0; max driven by actual + prediction upper bounds
+  const actualSgvs = displayData.map((d) => d.sgv).filter((v): v is number => v != null);
+  const predMaxSgvs = displayData
+    .flatMap((d) => [d.sgvPredicted, d.sgvPredUpper])
+    .filter((v): v is number => v != null);
+  const rawMin = actualSgvs.length > 0 ? Math.min(...actualSgvs) : 70;
+  const allMax = [...actualSgvs, ...predMaxSgvs];
+  const rawMax = allMax.length > 0 ? Math.max(...allMax) : 180;
+  const minVal = 0;
   const maxVal = Math.min(400, rawMax + 30);
 
   // ── Treatment marker points ─────────────────────────────────────────────────
@@ -640,20 +715,51 @@ export const GlucoseAreaChart = memo(function GlucoseAreaChart({ entries, loadin
                 connectNulls={false}
               />
 
-              {/* AR2 prediction — dashed cyan line, hollow circle on hover */}
+              {/* AR2 prediction cone — stacked areas: transparent base + cyan band + dashed center */}
               {showPredictions && (
-                <Line
-                  type="monotone"
-                  dataKey="sgvPredicted"
-                  stroke="#06b6d4"
-                  strokeWidth={2}
-                  strokeOpacity={0.75}
-                  strokeDasharray="5 4"
-                  dot={false}
-                  activeDot={{ r: 5, fill: 'none', stroke: '#06b6d4', strokeWidth: 2 }}
-                  connectNulls={false}
-                  isAnimationActive={false}
-                />
+                <>
+                  {/* Layer 1 (base): fills from 0 to sgvPredLower — transparent so it
+                      acts as a spacer for Recharts stacking. */}
+                  <Area
+                    type="monotone"
+                    dataKey="sgvPredLower"
+                    stackId="ar2cone"
+                    stroke="none"
+                    fill="transparent"
+                    connectNulls={false}
+                    isAnimationActive={false}
+                    dot={false}
+                    activeDot={false}
+                    legendType="none"
+                  />
+                  {/* Layer 2 (band): fills from sgvPredLower to sgvPredUpper in cyan */}
+                  <Area
+                    type="monotone"
+                    dataKey="sgvPredBandHeight"
+                    stackId="ar2cone"
+                    stroke="none"
+                    fill="#06b6d4"
+                    fillOpacity={0.15}
+                    connectNulls={false}
+                    isAnimationActive={false}
+                    dot={false}
+                    activeDot={false}
+                    legendType="none"
+                  />
+                  {/* Center line: dashed cyan prediction */}
+                  <Line
+                    type="monotone"
+                    dataKey="sgvPredicted"
+                    stroke="#06b6d4"
+                    strokeWidth={2}
+                    strokeOpacity={0.75}
+                    strokeDasharray="5 4"
+                    dot={false}
+                    activeDot={{ r: 5, fill: 'none', stroke: '#06b6d4', strokeWidth: 2 }}
+                    connectNulls={false}
+                    isAnimationActive={false}
+                  />
+                </>
               )}
 
               {/* Temp Basal bands — ReferenceArea per treatment, color by deviation */}
