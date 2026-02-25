@@ -247,11 +247,27 @@ export function SettingsPage() {
     setPushLoading(true);
     setPushError(null);
     try {
+      // 1. Request notification permission FIRST — must stay in user-gesture context
+      //    (Safari is strict: calling requestPermission after any await may fail silently)
+      if (!('Notification' in window)) {
+        throw new Error('Notificações não suportadas neste browser.');
+      }
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        throw new Error('Permissão de notificação negada. Verifique as configurações do browser.');
+      }
+
+      // 2. Fetch VAPID key from server
       const key = await getVapidPublicKey();
-      const sub = await subscribeToPush(key);
+
+      // 3. Subscribe (skip internal requestPermission since already granted)
+      const sub = await subscribeToPush(key, true);
+
+      // 4. Register subscription with backend
       await registerPushSubscription(sub.toJSON());
       setPushActive(true);
     } catch (err) {
+      console.error('[Push] subscribe error:', err);
       setPushError(err instanceof Error ? err.message : 'Erro ao ativar notificações.');
     } finally {
       setPushLoading(false);
