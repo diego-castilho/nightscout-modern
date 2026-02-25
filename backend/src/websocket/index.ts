@@ -8,6 +8,11 @@ import { Server as SocketIOServer } from 'socket.io';
 import type { Server as HTTPServer } from 'http';
 import { getDatabase } from '../db/connection.js';
 import type { GlucoseEntry, Treatment, DeviceStatus } from '../types/index.js';
+import { evaluateAlarms } from '../alarms/evaluator.js';
+import { broadcastAlarm } from '../alarms/pushService.js';
+import { setSnooze, getSnoozeMap } from '../alarms/subscriptionStore.js';
+import { DEFAULT_ALARM_CONFIG } from '../alarms/types.js';
+import type { AlarmThresholds, AlarmConfig } from '../alarms/types.js';
 
 let io: SocketIOServer | null = null;
 
@@ -127,6 +132,43 @@ function setupChangeStreams() {
 }
 
 // ============================================================================
+// Settings cache — avoids reading from DB on every 30 s poll tick
+// ============================================================================
+
+interface CachedSettings {
+  alarmThresholds: AlarmThresholds;
+  alarmConfig:     AlarmConfig;
+}
+
+let cachedSettings: CachedSettings | null = null;
+let cacheExpiry = 0;
+const CACHE_TTL_MS = 5 * 60_000; // re-read every 5 min
+
+async function getCachedSettings(): Promise<CachedSettings> {
+  if (cachedSettings && Date.now() < cacheExpiry) return cachedSettings;
+  try {
+    const db  = getDatabase();
+    const doc = await db.collection('app_settings').findOne({ key: 'global' });
+    const data = (doc?.data ?? {}) as Record<string, unknown>;
+
+    cachedSettings = {
+      alarmThresholds: (data.alarmThresholds as AlarmThresholds) ?? {
+        veryLow: 54, low: 70, high: 180, veryHigh: 250,
+      },
+      alarmConfig: (data.alarmConfig as AlarmConfig) ?? DEFAULT_ALARM_CONFIG,
+    };
+    cacheExpiry = Date.now() + CACHE_TTL_MS;
+  } catch {
+    cachedSettings = {
+      alarmThresholds: { veryLow: 54, low: 70, high: 180, veryHigh: 250 },
+      alarmConfig:     DEFAULT_ALARM_CONFIG,
+    };
+    cacheExpiry = Date.now() + 30_000; // retry sooner on error
+  }
+  return cachedSettings;
+}
+
+// ============================================================================
 // Polling fallback — used when MongoDB is standalone (no replica set)
 // Checks for new glucose entries every 30 seconds and emits via WebSocket.
 // ============================================================================
@@ -157,6 +199,44 @@ function startPollingFallback() {
           data: newest,
           timestamp: new Date().toISOString(),
         });
+      }
+
+      // ── Alarm evaluation (runs on every tick, not only on new entries) ─────
+      // This ensures STALE alarms fire even without new glucose arriving.
+      try {
+        const latest = await db
+          .collection<GlucoseEntry>('entries')
+          .find({ type: 'sgv' })
+          .sort({ date: -1 })
+          .limit(1)
+          .toArray()
+          .then((r) => r[0]);
+
+        if (latest) {
+          const recentEntries = await db
+            .collection<GlucoseEntry>('entries')
+            .find({ type: 'sgv' })
+            .sort({ date: -1 })
+            .limit(12)
+            .toArray();
+
+          const { alarmThresholds, alarmConfig } = await getCachedSettings();
+          const alarmEvents = evaluateAlarms(
+            latest, recentEntries, alarmThresholds, alarmConfig, getSnoozeMap()
+          );
+
+          const apiUrl = `http://localhost:${process.env.PORT ?? 3001}/api`;
+          for (const event of alarmEvents) {
+            // Set cooldown (30 min) so the same alarm doesn't repeat immediately
+            setSnooze(event.type, 30 * 60_000);
+            // Emit to connected WebSocket clients (in-app banner + sound)
+            io?.emit('alarm', event);
+            // Send Web Push to background browsers
+            await broadcastAlarm(event, apiUrl);
+          }
+        }
+      } catch {
+        // Silently ignore alarm evaluation errors (non-critical)
       }
     } catch {
       // Silently ignore transient polling errors

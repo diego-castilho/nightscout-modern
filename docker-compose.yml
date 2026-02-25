@@ -57,6 +57,11 @@ services:
       # CORS — configure in .env (comma-separated list of allowed origins)
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost}
 
+      # Web Push (VAPID) — generated once, never change after first push subscription
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      VAPID_CONTACT: ${VAPID_CONTACT:-mailto:admin@localhost}
+
       # LibreLink MCP Integration (optional)
       LIBRELINK_USERNAME: ${LIBRELINK_USERNAME:-}
       LIBRELINK_PASSWORD: ${LIBRELINK_PASSWORD:-}

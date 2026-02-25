@@ -12,6 +12,7 @@ import dotenv from 'dotenv';
 
 import { connectToDatabase } from './db/connection.js';
 import { initializeWebSocket } from './websocket/index.js';
+import { initWebPush } from './alarms/pushService.js';
 import apiRoutes from './routes/index.js';
 
 // Load environment variables
@@ -125,6 +126,9 @@ async function startServer() {
 
     // Initialize WebSocket server
     initializeWebSocket(httpServer, CORS_ORIGIN);
+
+    // Initialize Web Push (VAPID)
+    initWebPush();
 
     // Start HTTP server
     httpServer.listen(PORT, () => {

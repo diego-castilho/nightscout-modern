@@ -9,6 +9,7 @@ import analyticsRouter from './analytics.js';
 import settingsRouter from './settings.js';
 import treatmentsRouter from './treatments.js';
 import authRouter from './auth.js';
+import pushRouter from './push.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { getDatabaseStats } from '../db/queries.js';
 
@@ -119,6 +120,9 @@ router.get('/stats', async (_req, res) => {
 
 // Public routes (no auth required)
 router.use('/auth', authRouter);
+
+// Push routes — auth handled internally per-route (vapid-public-key and snooze are public)
+router.use('/push', pushRouter);
 
 // All routes below require a valid JWT
 router.use(authenticate);

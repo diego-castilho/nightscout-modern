@@ -18,6 +18,7 @@ const ALLOWED_KEYS = new Set([
   'unit', 'patientName', 'refreshInterval', 'dia', 'carbAbsorptionRate',
   'alarmThresholds', 'deviceAgeThresholds', 'scheduledBasalRate',
   'isf', 'icr', 'targetBG', 'targetBGHigh', 'rapidPenStep', 'predictionsDefault',
+  'alarmConfig',
 ]);
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {

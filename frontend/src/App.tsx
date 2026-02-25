@@ -10,6 +10,7 @@ import { useDashboardStore } from './stores/dashboardStore';
 import { getSettings } from './lib/api';
 
 import { Header } from './components/layout/Header';
+import { AlarmBanner } from './components/AlarmBanner';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -41,6 +42,7 @@ function AuthenticatedLayout() {
 
   return (
     <div className="min-h-screen bg-background">
+      <AlarmBanner />
       <Header lastUpdated={lastUpdated} />
       <Routes>
         <Route path="/" element={<DashboardPage />} />

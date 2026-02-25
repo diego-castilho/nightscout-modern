@@ -7,14 +7,15 @@ import { useDashboardStore } from '../stores/dashboardStore';
 import { fromDisplayUnit, toDisplayUnit, unitLabel } from '../lib/glucose';
 import type { GlucoseUnit } from '../lib/glucose';
 import type { AlarmThresholds } from '../stores/dashboardStore';
-import { saveSettings, generateAccessToken } from '../lib/api';
+import { saveSettings, generateAccessToken, getVapidPublicKey, registerPushSubscription, unregisterPushSubscription } from '../lib/api';
+import { subscribeToPush, unsubscribeFromPush, getCurrentSubscription } from '../lib/pushSubscription';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select } from '../components/ui/select';
 import { Button } from '../components/ui/button';
-import { User, SlidersHorizontal, RefreshCw, RotateCcw, Syringe, Timer, Activity, Calculator, Link2, Copy, Check } from 'lucide-react';
+import { User, SlidersHorizontal, RefreshCw, RotateCcw, Syringe, Timer, Activity, Calculator, Link2, Copy, Check, Bell, BellOff } from 'lucide-react';
 import { DEFAULT_DEVICE_AGE_THRESHOLDS } from '../lib/deviceAge';
 import type { DeviceAgeThresholds } from '../lib/deviceAge';
 
@@ -120,6 +121,7 @@ export function SettingsPage() {
     targetBGHigh, setTargetBGHigh,
     rapidPenStep, setRapidPenStep,
     predictionsDefault, setPredictionsDefault,
+    alarmConfig, setAlarmConfig,
   } = useDashboardStore();
 
   // Local threshold state (shown in selected unit)
@@ -139,6 +141,18 @@ export function SettingsPage() {
   const [generatingLink, setGeneratingLink] = useState(false);
   const [linkError,      setLinkError]      = useState<string | null>(null);
   const [copied,         setCopied]         = useState(false);
+
+  // Push notification state
+  const [pushActive,    setPushActive]    = useState(false);
+  const [pushLoading,   setPushLoading]   = useState(false);
+  const [pushError,     setPushError]     = useState<string | null>(null);
+
+  // Check current push subscription status on mount
+  useEffect(() => {
+    getCurrentSubscription()
+      .then((sub) => setPushActive(!!sub))
+      .catch(() => {});
+  }, []);
 
   // Recalculate displayed thresholds when unit changes
   useEffect(() => {
@@ -221,6 +235,44 @@ export function SettingsPage() {
   function handlePredictionsDefaultChange(on: boolean) {
     setPredictionsDefault(on);
     saveSettings({ predictionsDefault: on }).catch(() => {});
+  }
+
+  function handleAlarmConfigChange(updates: Partial<typeof alarmConfig>) {
+    const next = { ...alarmConfig, ...updates };
+    setAlarmConfig(updates);
+    saveSettings({ alarmConfig: next }).catch(() => {});
+  }
+
+  async function handlePushSubscribe() {
+    setPushLoading(true);
+    setPushError(null);
+    try {
+      const key = await getVapidPublicKey();
+      const sub = await subscribeToPush(key);
+      await registerPushSubscription(sub.toJSON());
+      setPushActive(true);
+    } catch (err) {
+      setPushError(err instanceof Error ? err.message : 'Erro ao ativar notificações.');
+    } finally {
+      setPushLoading(false);
+    }
+  }
+
+  async function handlePushUnsubscribe() {
+    setPushLoading(true);
+    setPushError(null);
+    try {
+      const sub = await getCurrentSubscription();
+      if (sub) {
+        await unregisterPushSubscription(sub.endpoint);
+        await unsubscribeFromPush();
+      }
+      setPushActive(false);
+    } catch (err) {
+      setPushError(err instanceof Error ? err.message : 'Erro ao desativar notificações.');
+    } finally {
+      setPushLoading(false);
+    }
   }
 
   function handleDeviceAgeReset() {
@@ -882,6 +934,167 @@ export function SettingsPage() {
                 Atualizado automaticamente ao registrar uma Nova Caneta Rápida.
               </p>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* ============ ALARMES ============ */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Bell className="h-4 w-4" />
+              Alarmes
+            </CardTitle>
+            <CardDescription>
+              Notificações sonoras e push quando a glicose sair dos limites configurados.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+
+            {/* Master toggle */}
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label>Alarmes habilitados</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Liga/desliga todos os alarmes de glicose.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={alarmConfig.enabled}
+                onClick={() => handleAlarmConfigChange({ enabled: !alarmConfig.enabled })}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent
+                            transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
+                            ${alarmConfig.enabled ? 'bg-primary' : 'bg-input'}`}
+              >
+                <span className={`pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform
+                                  ${alarmConfig.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
+              </button>
+            </div>
+
+            {alarmConfig.enabled && (
+              <>
+                {/* Per-type toggles */}
+                <div className="space-y-3 border-t pt-4">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tipos de alarme</p>
+
+                  {(
+                    [
+                      { key: 'veryLow',    label: 'Muito baixo',      dot: 'bg-red-500'    },
+                      { key: 'low',        label: 'Baixo',            dot: 'bg-orange-500' },
+                      { key: 'high',       label: 'Alto',             dot: 'bg-yellow-400' },
+                      { key: 'veryHigh',   label: 'Muito alto',       dot: 'bg-red-500'    },
+                      { key: 'predictive', label: 'Preditivo AR2',    dot: 'bg-cyan-400'   },
+                      { key: 'rapidChange',label: 'Variação rápida',  dot: 'bg-purple-400' },
+                    ] as const
+                  ).map(({ key, label, dot }) => (
+                    <div key={key} className="flex items-center justify-between">
+                      <Label className="flex items-center gap-2 cursor-pointer font-normal">
+                        <span className={`inline-block w-2 h-2 rounded-full ${dot}`} />
+                        {label}
+                      </Label>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={alarmConfig[key]}
+                        onClick={() => handleAlarmConfigChange({ [key]: !alarmConfig[key] })}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent
+                                    transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
+                                    ${alarmConfig[key] ? 'bg-primary' : 'bg-input'}`}
+                      >
+                        <span className={`pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform
+                                          ${alarmConfig[key] ? 'translate-x-4' : 'translate-x-0'}`} />
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Stale toggle + staleMins */}
+                  <div className="flex items-center justify-between">
+                    <Label className="flex items-center gap-2 cursor-pointer font-normal">
+                      <span className="inline-block w-2 h-2 rounded-full bg-gray-400" />
+                      Dados desatualizados
+                    </Label>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={alarmConfig.stale}
+                      onClick={() => handleAlarmConfigChange({ stale: !alarmConfig.stale })}
+                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent
+                                  transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
+                                  ${alarmConfig.stale ? 'bg-primary' : 'bg-input'}`}
+                    >
+                      <span className={`pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform
+                                        ${alarmConfig.stale ? 'translate-x-4' : 'translate-x-0'}`} />
+                    </button>
+                  </div>
+                  {alarmConfig.stale && (
+                    <div className="flex items-center gap-3 pl-4">
+                      <Label htmlFor="staleMins" className="text-xs text-muted-foreground shrink-0">
+                        Alertar após
+                      </Label>
+                      <div className="relative w-[90px]">
+                        <Input
+                          id="staleMins"
+                          type="number"
+                          min={5}
+                          max={60}
+                          step={5}
+                          value={alarmConfig.staleMins}
+                          onChange={(e) => {
+                            const v = parseInt(e.target.value, 10);
+                            if (!isNaN(v) && v >= 5) handleAlarmConfigChange({ staleMins: v });
+                          }}
+                        />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">min</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Push notification section */}
+                <div className="space-y-3 border-t pt-4">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Notificações push neste dispositivo
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Permite que alarmes acordem o browser mesmo com a aba fechada ou em segundo plano.
+                    Cada dispositivo precisa ser ativado separadamente.
+                  </p>
+                  {pushActive ? (
+                    <div className="flex items-center gap-3">
+                      <span className="flex items-center gap-1.5 text-sm text-green-600 dark:text-green-400">
+                        <Bell className="h-4 w-4" />
+                        Ativo neste dispositivo
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={pushLoading}
+                        onClick={handlePushUnsubscribe}
+                        className="gap-1.5 text-xs"
+                      >
+                        <BellOff className="h-3.5 w-3.5" />
+                        {pushLoading ? 'Aguarde…' : 'Desativar'}
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={pushLoading}
+                      onClick={handlePushSubscribe}
+                      className="gap-1.5"
+                    >
+                      <Bell className="h-3.5 w-3.5" />
+                      {pushLoading ? 'Aguarde…' : 'Ativar notificações neste dispositivo'}
+                    </Button>
+                  )}
+                  {pushError && (
+                    <p className="text-xs text-destructive">{pushError}</p>
+                  )}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 

@@ -205,6 +205,23 @@ export async function getDatabaseStats() {
 // Settings (server-side persistence)
 // ============================================================================
 
+export interface AlarmConfig {
+  enabled:      boolean;
+  veryLow:      boolean;
+  low:          boolean;
+  high:         boolean;
+  veryHigh:     boolean;
+  predictive:   boolean;
+  stale:        boolean;
+  staleMins:    number;
+  rapidChange:  boolean;
+}
+
+export const DEFAULT_ALARM_CONFIG: AlarmConfig = {
+  enabled: false, veryLow: true, low: true, high: true, veryHigh: true,
+  predictive: true, stale: true, staleMins: 15, rapidChange: false,
+};
+
 export interface AppSettings {
   unit?: 'mgdl' | 'mmol';
   patientName?: string;
@@ -232,6 +249,7 @@ export interface AppSettings {
   targetBGHigh?: number;    // Target blood glucose high end mg/dL
   rapidPenStep?:       0.5 | 1;  // Rapid pen dosing increment in U
   predictionsDefault?: boolean;   // AR2 prediction enabled by default on chart
+  alarmConfig?:        AlarmConfig;
 }
 
 export async function getSettings(): Promise<AppSettings | null> {
@@ -412,6 +430,23 @@ export async function getMealtimeData(
     { params: { startDate, endDate }, timeout: 45_000 }
   );
   return response.data.data;
+}
+
+// ============================================================================
+// Push / Alarm Endpoints
+// ============================================================================
+
+export async function getVapidPublicKey(): Promise<string> {
+  const response = await api.get<{ success: boolean; data: { publicKey: string } }>('/push/vapid-public-key');
+  return response.data.data.publicKey;
+}
+
+export async function registerPushSubscription(sub: object): Promise<void> {
+  await api.post('/push/subscribe', sub);
+}
+
+export async function unregisterPushSubscription(endpoint: string): Promise<void> {
+  await api.delete('/push/unsubscribe', { data: { endpoint } });
 }
 
 // ============================================================================

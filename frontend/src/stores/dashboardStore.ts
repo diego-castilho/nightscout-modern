@@ -5,7 +5,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { GlucoseUnit } from '../lib/glucose';
-import type { AppSettings } from '../lib/api';
+import type { AppSettings, AlarmConfig } from '../lib/api';
+import { DEFAULT_ALARM_CONFIG } from '../lib/api';
 import { DEFAULT_DEVICE_AGE_THRESHOLDS } from '../lib/deviceAge';
 import type { DeviceAgeThresholds } from '../lib/deviceAge';
 
@@ -41,6 +42,7 @@ interface DashboardState {
   targetBGHigh: number;    // Target BG high end mg/dL (default 120)
   rapidPenStep:       0.5 | 1;  // Rapid pen dosing increment in U (default 1)
   predictionsDefault: boolean;   // AR2 prediction on by default (default false)
+  alarmConfig: AlarmConfig;
   setPeriod: (period: Period) => void;
   toggleDarkMode: () => void;
   setDarkMode: (dark: boolean) => void;
@@ -59,6 +61,7 @@ interface DashboardState {
   setTargetBGHigh: (targetBGHigh: number)    => void;
   setRapidPenStep:       (step: 0.5 | 1)  => void;
   setPredictionsDefault: (on: boolean)     => void;
+  setAlarmConfig: (cfg: Partial<AlarmConfig>) => void;
   initFromServer: (settings: AppSettings) => void;
 }
 
@@ -86,6 +89,7 @@ export const useDashboardStore = create<DashboardState>()(
       targetBGHigh: 120,
       rapidPenStep:       1,
       predictionsDefault: false,
+      alarmConfig: DEFAULT_ALARM_CONFIG,
 
       setPeriod: (period) => set({ period }),
 
@@ -126,6 +130,8 @@ export const useDashboardStore = create<DashboardState>()(
       setTargetBGHigh:       (targetBGHigh)       => set({ targetBGHigh }),
       setRapidPenStep:       (rapidPenStep)       => set({ rapidPenStep }),
       setPredictionsDefault: (predictionsDefault) => set({ predictionsDefault }),
+      setAlarmConfig: (cfg) =>
+        set((state) => ({ alarmConfig: { ...state.alarmConfig, ...cfg } })),
 
       initFromServer: (settings) => set((state) => ({
         unit:            settings.unit            ?? state.unit,
@@ -144,6 +150,9 @@ export const useDashboardStore = create<DashboardState>()(
         targetBGHigh: settings.targetBGHigh ?? state.targetBGHigh,
         rapidPenStep:       settings.rapidPenStep       ?? state.rapidPenStep,
         predictionsDefault: settings.predictionsDefault  ?? state.predictionsDefault,
+        alarmConfig: settings.alarmConfig
+          ? { ...DEFAULT_ALARM_CONFIG, ...state.alarmConfig, ...settings.alarmConfig }
+          : state.alarmConfig,
       })),
     }),
     {
@@ -165,6 +174,7 @@ export const useDashboardStore = create<DashboardState>()(
         targetBGHigh:       state.targetBGHigh,
         rapidPenStep:       state.rapidPenStep,
         predictionsDefault: state.predictionsDefault,
+        alarmConfig:        state.alarmConfig,
       }),
     }
   )
