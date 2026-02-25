@@ -6,8 +6,15 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { getCurrentSubscription } from '../lib/pushSubscription';
 
-const WS_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3001/api')
-  .replace('/api', '');
+// Compute WebSocket URL at runtime so it works in all deployment scenarios:
+//   VITE_API_URL = '/api'          → relative URL → use current origin
+//     (nginx proxies /socket.io/ to the backend — same host, works for local + external)
+//   VITE_API_URL = 'http://host:3001/api' → absolute URL → strip /api
+//     (direct connection, used in local dev without nginx)
+const _apiUrl = import.meta.env.VITE_API_URL as string | undefined;
+const WS_URL  = (!_apiUrl || _apiUrl.startsWith('/'))
+  ? window.location.origin                // nginx will proxy /socket.io/
+  : _apiUrl.replace(/\/api$/, '');
 
 export interface AlarmEvent {
   type:     string;
