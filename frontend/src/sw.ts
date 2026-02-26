@@ -20,6 +20,11 @@ interface PushNotificationOptions extends NotificationOptions {
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 
+// Force the new SW to activate immediately instead of waiting for old tabs to close.
+// Without this, navigator.serviceWorker.ready never resolves with the new SW.
+self.addEventListener('install', () => { self.skipWaiting(); });
+self.addEventListener('activate', (event) => { event.waitUntil(self.clients.claim()); });
+
 // ── Runtime caching for API calls — NetworkFirst, 5-min cache ────────────────
 registerRoute(
   ({ url }) => url.pathname.startsWith('/api/'),

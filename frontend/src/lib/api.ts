@@ -77,6 +77,7 @@ export async function getGlucoseEntries(params?: {
 export async function getGlucoseRange(startDate: string, endDate: string) {
   const response = await api.get<{ success: boolean; data: GlucoseEntry[] }>('/glucose/range', {
     params: { startDate, endDate },
+    timeout: 30_000,
   });
   return response.data.data;
 }

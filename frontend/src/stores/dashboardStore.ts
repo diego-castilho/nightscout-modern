@@ -10,7 +10,7 @@ import { DEFAULT_ALARM_CONFIG } from '../lib/api';
 import { DEFAULT_DEVICE_AGE_THRESHOLDS } from '../lib/deviceAge';
 import type { DeviceAgeThresholds } from '../lib/deviceAge';
 
-export type Period = '1h' | '3h' | '6h' | '12h' | '24h' | '7d' | '14d' | '30d';
+export type Period = '1h' | '3h' | '6h' | '12h' | '24h' | '48h' | '7d' | '14d' | '30d';
 
 export interface AlarmThresholds {
   veryLow:  number;  // mg/dL, default 54
@@ -211,6 +211,9 @@ export function getPeriodDates(period: Period): { startDate: string; endDate: st
       break;
     case '24h':
       startDate.setHours(startDate.getHours() - 24);
+      break;
+    case '48h':
+      startDate.setHours(startDate.getHours() - 48);
       break;
     case '7d':
       startDate.setDate(startDate.getDate() - 7);

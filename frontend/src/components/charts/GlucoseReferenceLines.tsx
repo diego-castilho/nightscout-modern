@@ -18,11 +18,13 @@ import { formatGlucose } from '../../lib/glucose';
 // All threshold lines share the same dotted "3 3" pattern and strokeWidth 1.5
 // so every chart has a consistent visual language. Colours differ per zone.
 
+// insideBottomRight: bottom edge of label anchored to line → text appears ABOVE the line
+// insideTopRight:    top edge of label anchored to line    → text appears BELOW the line
 const ZONE_CONFIG = {
-  veryLow:  { color: 'var(--glucose-very-low)',  strokeWidth: 1.5, dashArray: '3 3' },
-  low:      { color: 'var(--glucose-low)',        strokeWidth: 1.5, dashArray: '3 3' },
-  high:     { color: 'var(--glucose-high)',       strokeWidth: 1.5, dashArray: '3 3' },
-  veryHigh: { color: 'var(--glucose-very-high)', strokeWidth: 1.5, dashArray: '3 3' },
+  veryLow:  { color: 'var(--glucose-very-low)',  strokeWidth: 1.5, dashArray: '3 3', labelPos: 'insideTopRight'    as const },
+  low:      { color: 'var(--glucose-low)',        strokeWidth: 1.5, dashArray: '3 3', labelPos: 'insideBottomRight' as const },
+  high:     { color: 'var(--glucose-high)',       strokeWidth: 1.5, dashArray: '3 3', labelPos: 'insideTopRight'    as const },
+  veryHigh: { color: 'var(--glucose-very-high)', strokeWidth: 1.5, dashArray: '3 3', labelPos: 'insideBottomRight' as const },
 } as const;
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -63,10 +65,9 @@ export function GlucoseReferenceLines({
             {showLabels && (
               <Label
                 value={formatGlucose(value, unit)}
-                position="right"
+                position={cfg.labelPos}
                 fontSize={10}
                 fill={cfg.color}
-                offset={4}
               />
             )}
           </ReferenceLine>

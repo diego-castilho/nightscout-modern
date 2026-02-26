@@ -11,6 +11,7 @@ const PERIODS: { label: string; value: Period }[] = [
   { label: '6h', value: '6h' },
   { label: '12h', value: '12h' },
   { label: '24h', value: '24h' },
+  { label: '48h', value: '48h' },
   { label: '7d', value: '7d' },
   { label: '14d', value: '14d' },
   { label: '30d', value: '30d' },

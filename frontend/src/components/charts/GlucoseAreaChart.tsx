@@ -96,8 +96,10 @@ const ZONE = {
 //
 // The linearGradient uses gradientUnits="objectBoundingBox" (SVG default).
 // The bbox spans [bboxBottom, bboxTop] in glucose units:
-//   - Fill path:   bboxBottom = minVal  (baseline), bboxTop = rawMax
-//   - Stroke path: bboxBottom = rawMin  (lowest data point), bboxTop = rawMax
+//   - Fill path:   bboxBottom = minVal (baseline=0), bboxTop = rawActMax (actual glucose max)
+//   - Stroke path: bboxBottom = rawMin (lowest data point), bboxTop = rawActMax
+// rawActMax excludes AR2 prediction upper bounds so the gradient stays aligned with
+// the threshold reference lines regardless of whether predictions are visible.
 // Formula: offset = (bboxTop − val) / (bboxTop − bboxBottom)
 function toOffset(val: number, bboxBottom: number, bboxTop: number): string {
   const range = bboxTop - bboxBottom;
@@ -246,7 +248,8 @@ function getTickConfig(period: Period, start: number, end: number) {
     '6h':  { intervalMs: 30 * 60 * 1000,           formatStr: 'HH:mm' },
     '12h': { intervalMs: 60 * 60 * 1000,           formatStr: 'HH:mm' },
     '24h': { intervalMs: 2 * 60 * 60 * 1000,       formatStr: 'HH:mm' },
-    '7d':  { intervalMs: 24 * 60 * 60 * 1000,      formatStr: 'EEE dd/MM' },
+    '48h': { intervalMs: 4 * 60 * 60 * 1000,       formatStr: 'EEE HH:mm' },
+    '7d':  { intervalMs: 24 * 60 * 60 * 1000,      formatStr: 'dd/MM' },
     '14d': { intervalMs: 2 * 24 * 60 * 60 * 1000,  formatStr: 'dd/MM' },
     '30d': { intervalMs: 5 * 24 * 60 * 60 * 1000,  formatStr: 'dd/MM' },
   };
@@ -384,6 +387,34 @@ function CustomTooltip({ active, payload, unit, thresholds }: CustomTooltipProps
   );
 }
 
+// ── Custom XAxis tick ─────────────────────────────────────────────────────────
+// When the active format string contains a space (e.g. "EEE HH:mm" → "Ter 05:00",
+// "EEE dd/MM" → "Sex 19/02"), the day abbreviation is rendered on the top line
+// and the time/date on the bottom line, both horizontally centered on the tick x.
+// Single-line formats (HH:mm, dd/MM) render as before.
+
+interface XTickProps { x?: number; y?: number; payload?: { value: number }; formatStr: string; }
+
+function XTick({ x, y, payload, formatStr }: XTickProps) {
+  if (payload == null || x == null || y == null) return null;
+  const label = format(new Date(payload.value), formatStr, { locale: ptBR });
+  const parts  = label.split(' '); // ["Ter", "05:00"] or ["Sex", "19/02"] or ["HH:mm"]
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text textAnchor="middle" fontSize={11} fill="currentColor">
+        {parts.length === 2 ? (
+          <>
+            <tspan x={0} dy={8}>{parts[0]}</tspan>
+            <tspan x={0} dy={13}>{parts[1]}</tspan>
+          </>
+        ) : (
+          <tspan x={0} dy={8}>{label}</tspan>
+        )}
+      </text>
+    </g>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 // Returns the fill color for a Temp Basal band based on deviation from scheduled rate
@@ -438,6 +469,7 @@ export const GlucoseAreaChart = memo(function GlucoseAreaChart({ entries, loadin
 
   // Show markers only for periods ≤ 24h (for longer periods the chart scale
   // makes markers too dense and visually unreadable)
+  // Treatment markers only for periods ≤ 24h — at 48h the density makes them unreadable.
   const showTreatments = ['1h', '3h', '6h', '12h', '24h'].includes(period);
 
   useEffect(() => {
@@ -477,12 +509,22 @@ export const GlucoseAreaChart = memo(function GlucoseAreaChart({ entries, loadin
     );
   }
 
-  const data: ChartPoint[] = [...entries]
-    .sort((a, b) => a.date - b.date)
-    .map((e) => ({ time: e.date, sgv: e.sgv, direction: e.direction, trend: e.trend }));
+  // Build chart data, inserting a null point mid-gap wherever consecutive readings
+  // are more than 20 minutes apart.  Without this, Recharts draws a straight line
+  // across gaps (e.g. sensor warm-up, lost connectivity), which is misleading.
+  const GAP_THRESHOLD_MS = 20 * 60_000;
+  const sorted = [...entries].sort((a, b) => a.date - b.date);
+  const data: ChartPoint[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const e = sorted[i];
+    if (i > 0 && e.date - sorted[i - 1].date > GAP_THRESHOLD_MS) {
+      data.push({ time: Math.round((sorted[i - 1].date + e.date) / 2), sgv: null });
+    }
+    data.push({ time: e.date, sgv: e.sgv, direction: e.direction, trend: e.trend });
+  }
 
   // ── AR2 predictions ─────────────────────────────────────────────────────────
-  const showPredictions = predictionsEnabled && ['1h', '3h', '6h', '12h', '24h'].includes(period);
+  const showPredictions = predictionsEnabled && ['1h', '3h', '6h', '12h', '24h', '48h'].includes(period);
   let chartData: ChartPoint[] = data.map((d) => ({ ...d }));
 
   if (showPredictions && data.length >= 2) {
@@ -524,11 +566,15 @@ export const GlucoseAreaChart = memo(function GlucoseAreaChart({ entries, loadin
   const predMaxSgvs = displayData
     .flatMap((d) => [d.sgvPredicted, d.sgvPredUpper])
     .filter((v): v is number => v != null);
-  const rawMin = actualSgvs.length > 0 ? Math.min(...actualSgvs) : 70;
-  const allMax = [...actualSgvs, ...predMaxSgvs];
-  const rawMax = allMax.length > 0 ? Math.max(...allMax) : 180;
-  const minVal = 0;
-  const maxVal = Math.min(400, rawMax + 30);
+  const rawMin    = actualSgvs.length > 0 ? Math.min(...actualSgvs) : 70;
+  // rawActMax: max of actual glucose readings only — used for gradient bbox.
+  // rawMax: includes prediction upper bounds — used for Y-axis sizing so predictions fit.
+  // Keeping them separate ensures gradient color bands stay aligned with threshold
+  // reference lines even when AR2 predictions extend above the current glucose level.
+  const rawActMax = actualSgvs.length > 0 ? Math.max(...actualSgvs) : 180;
+  const rawMax    = predMaxSgvs.length > 0 ? Math.max(rawActMax, ...predMaxSgvs) : rawActMax;
+  const minVal    = 0;
+  const maxVal    = Math.min(400, rawMax + 30);
 
   // ── Treatment marker points ─────────────────────────────────────────────────
   const displayStart = zoomedDomain ? zoomedDomain[0] : (data[0]?.time ?? 0);
@@ -545,9 +591,21 @@ export const GlucoseAreaChart = memo(function GlucoseAreaChart({ entries, loadin
 
   const visibleEventTypes = [...new Set(visibleTreatments.map((t) => t.eventType))];
 
+  // Fixed period boundaries for the X axis.
+  // Using 'dataMin'/'dataMax' would show only the actual data range — e.g. if the
+  // sensor was inserted 6 h ago and 12h is selected, the chart would show only 6 h.
+  // Anchoring to getPeriodDates ensures the full selected window is always visible.
+  const { startDate: _periodStart, endDate: _periodEnd } = getPeriodDates(period);
+  const periodDomainStart = new Date(_periodStart).getTime();
+  // Extend the right edge to cover predictions if they go beyond "now"
+  const periodDomainEnd = showPredictions && chartData.length > 0
+    ? Math.max(new Date(_periodEnd).getTime(), chartData[chartData.length - 1].time)
+    : new Date(_periodEnd).getTime();
+  const baseDomain: [number, number] = [periodDomainStart, periodDomainEnd];
+
   // Tick config
   const { ticks: baseTicks, formatStr: baseFormatStr } = getTickConfig(
-    period, data[0].time, chartData[chartData.length - 1].time
+    period, periodDomainStart, periodDomainEnd
   );
 
   let activeTicks: number[];
@@ -568,16 +626,21 @@ export const GlucoseAreaChart = memo(function GlucoseAreaChart({ entries, loadin
 
   const actualCount = displayData.filter((d) => d.sgv != null).length;
   const showDots = actualCount <= 20;
-  // Fill bbox: [minVal, rawMax]  — fill path includes baseline down to minVal
-  // Stroke bbox: [rawMin, rawMax] — stroke path only spans the actual data curve
-  const fillStops   = buildGradientStops(minVal,  rawMax, alarmThresholds);
-  const strokeStops = buildGradientStops(rawMin, rawMax, alarmThresholds);
+  // Fill bbox:   [minVal,  rawActMax] — Area (dataKey="sgv") baseline at 0, top at actual max
+  // Stroke bbox: [rawMin,  rawActMax] — stroke follows the actual glucose curve
+  // Using rawActMax (not rawMax) is critical: rawMax may include AR2 prediction upper
+  // bounds that exceed the actual curve, which would shift gradient stops above the
+  // corresponding threshold reference lines.
+  const fillStops   = buildGradientStops(minVal,   rawActMax, alarmThresholds);
+  const strokeStops = buildGradientStops(rawMin,   rawActMax, alarmThresholds);
 
-  const refLines: { y: number; color: string; label: string; dash: string }[] = [
-    { y: alarmThresholds.veryHigh, color: ZONE.veryHigh, label: String(alarmThresholds.veryHigh), dash: '3 4' },
-    { y: alarmThresholds.high,     color: ZONE.high,     label: String(alarmThresholds.high),     dash: '4 4' },
-    { y: alarmThresholds.low,      color: ZONE.low,      label: String(alarmThresholds.low),       dash: '4 4' },
-    { y: alarmThresholds.veryLow,  color: ZONE.veryLow,  label: String(alarmThresholds.veryLow),  dash: '2 4' },
+  // insideBottomRight: bottom edge of label anchored to line → text appears ABOVE the line
+  // insideTopRight:    top edge of label anchored to line → text appears BELOW the line
+  const refLines = [
+    { y: alarmThresholds.veryHigh, color: ZONE.veryHigh, label: String(alarmThresholds.veryHigh), dash: '3 4', labelPos: 'insideBottomRight' as const },
+    { y: alarmThresholds.high,     color: ZONE.high,     label: String(alarmThresholds.high),     dash: '4 4', labelPos: 'insideTopRight'    as const },
+    { y: alarmThresholds.low,      color: ZONE.low,      label: String(alarmThresholds.low),      dash: '4 4', labelPos: 'insideBottomRight' as const },
+    { y: alarmThresholds.veryLow,  color: ZONE.veryLow,  label: String(alarmThresholds.veryLow),  dash: '2 4', labelPos: 'insideTopRight'    as const },
   ].filter((r) => r.y > minVal && r.y < maxVal);
 
   // Zoom handlers
@@ -665,10 +728,10 @@ export const GlucoseAreaChart = memo(function GlucoseAreaChart({ entries, loadin
                 dataKey="time"
                 type="number"
                 scale="time"
-                domain={['dataMin', 'dataMax']}
+                domain={zoomedDomain ?? baseDomain}
                 ticks={activeTicks}
-                tickFormatter={(ms: number) => format(new Date(ms), activeFormatStr, { locale: ptBR })}
-                tick={{ fontSize: 11, fill: 'currentColor' }}
+                tick={<XTick formatStr={activeFormatStr} />}
+                height={activeFormatStr.includes(' ') ? 46 : 28}
                 className="text-muted-foreground"
               />
 
@@ -695,7 +758,7 @@ export const GlucoseAreaChart = memo(function GlucoseAreaChart({ entries, loadin
                   strokeWidth={1.5}
                   label={{
                     value: `${formatGlucose(r.y, unit)}`,
-                    position: r.y >= 180 ? 'insideTopRight' : 'insideBottomRight',
+                    position: r.labelPos,
                     fontSize: 10,
                     fill: r.color,
                   }}

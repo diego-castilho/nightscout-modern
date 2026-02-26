@@ -34,7 +34,7 @@ export function useGlucoseData() {
     const thresholds = { veryLow, low, high, veryHigh };
 
     async function fetchData() {
-      setState((prev) => ({ ...prev, loading: true, error: null }));
+      setState((prev) => ({ ...prev, loading: true, error: null, entries: [], analytics: null }));
 
       try {
         const { startDate, endDate } = getPeriodDates(period);

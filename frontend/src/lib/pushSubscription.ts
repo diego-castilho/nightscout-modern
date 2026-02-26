@@ -19,24 +19,52 @@ function urlBase64ToArrayBuffer(base64String: string): ArrayBuffer {
 }
 
 /**
- * Waits for the service worker to be active, with a 15-second timeout.
- * Throws a descriptive error if the SW never activates.
+ * Ensures the service worker is registered and active, returning the registration.
+ *
+ * We call register() explicitly (idempotent — returns existing registration if
+ * already registered) instead of relying on vite-pwa's registerSW.js, which runs
+ * asynchronously after page load and might not have executed yet.
+ *
+ * With self.skipWaiting() + clients.claim() in sw.ts, the install→activate
+ * transition completes in < 1 second. We wait for it via statechange events so
+ * we don't block on navigator.serviceWorker.ready (which requires a controlling
+ * SW and can hang after a hard refresh on some browsers).
  */
 async function waitForServiceWorker(): Promise<ServiceWorkerRegistration> {
-  const timeoutMs = 15_000;
-  return Promise.race([
-    navigator.serviceWorker.ready,
-    new Promise<never>((_, reject) =>
-      setTimeout(
-        () => reject(new Error(
-          'Service Worker não iniciou a tempo. ' +
-          'Verifique se o site está sendo acessado via HTTPS ou localhost, ' +
-          'e recarregue a página.'
-        )),
-        timeoutMs
-      )
-    ),
-  ]);
+  // Idempotent — returns existing registration or starts a fresh one.
+  const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+
+  // Common case: SW already active from a previous visit.
+  if (reg.active) return reg;
+
+  // SW is in installing/waiting state — wait for it to become active.
+  return new Promise<ServiceWorkerRegistration>((resolve, reject) => {
+    const tid = setTimeout(
+      () => reject(new Error(
+        'Service Worker não ativou. Recarregue a página (F5) e tente novamente.'
+      )),
+      15_000,
+    );
+
+    const sw = reg.installing ?? reg.waiting;
+    if (!sw) {
+      // No transitioning SW and no active SW — unusual state, use ready as fallback.
+      navigator.serviceWorker.ready.then(() => { clearTimeout(tid); resolve(reg); });
+      return;
+    }
+
+    sw.addEventListener('statechange', function listen() {
+      if (sw.state === 'activated') {
+        clearTimeout(tid);
+        sw.removeEventListener('statechange', listen);
+        resolve(reg);
+      } else if (sw.state === 'redundant') {
+        clearTimeout(tid);
+        sw.removeEventListener('statechange', listen);
+        reject(new Error('Service Worker falhou ao instalar. Recarregue a página.'));
+      }
+    });
+  });
 }
 
 /** Returns the current push subscription for this browser, or null. */

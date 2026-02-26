@@ -156,22 +156,22 @@ function AGPChart({ dailyPatterns, unit, thresholds }: AGPChartProps) {
           <ReferenceLine
             y={toD(thresholds.veryLow)}
             stroke="#dc2626" strokeDasharray="3 2" strokeWidth={1}
-            label={{ value: String(toD(thresholds.veryLow)), position: 'right', fontSize: 10, fill: '#dc2626' }}
+            label={{ value: String(toD(thresholds.veryLow)), position: 'insideTopRight', fontSize: 10, fill: '#dc2626' }}
           />
           <ReferenceLine
             y={toD(thresholds.low)}
             stroke="#f97316" strokeDasharray="4 2" strokeWidth={1.5}
-            label={{ value: String(toD(thresholds.low)), position: 'right', fontSize: 10, fill: '#f97316' }}
+            label={{ value: String(toD(thresholds.low)), position: 'insideBottomRight', fontSize: 10, fill: '#f97316' }}
           />
           <ReferenceLine
             y={toD(thresholds.high)}
             stroke="#16a34a" strokeDasharray="4 2" strokeWidth={1.5}
-            label={{ value: String(toD(thresholds.high)), position: 'right', fontSize: 10, fill: '#16a34a' }}
+            label={{ value: String(toD(thresholds.high)), position: 'insideTopRight', fontSize: 10, fill: '#16a34a' }}
           />
           <ReferenceLine
             y={toD(thresholds.veryHigh)}
             stroke="#dc2626" strokeDasharray="3 2" strokeWidth={1}
-            label={{ value: String(toD(thresholds.veryHigh)), position: 'right', fontSize: 10, fill: '#dc2626' }}
+            label={{ value: String(toD(thresholds.veryHigh)), position: 'insideBottomRight', fontSize: 10, fill: '#dc2626' }}
           />
 
           {/* P5–P95 outer band */}
@@ -187,6 +187,14 @@ function AGPChart({ dailyPatterns, unit, thresholds }: AGPChartProps) {
           <Area type="monotone" dataKey="iqrTop" stackId="iqr"
             fill="rgba(59,130,246,0.30)" stroke="rgba(59,130,246,0.50)" strokeWidth={1}
             legendType="none" isAnimationActive={false} />
+
+          {/* Bottom borders — Lines tracing the lower edge of each band */}
+          <Line type="monotone" dataKey="outerBase"
+            stroke="rgba(59,130,246,0.28)" strokeWidth={1}
+            dot={false} legendType="none" isAnimationActive={false} />
+          <Line type="monotone" dataKey="iqrBase"
+            stroke="rgba(59,130,246,0.50)" strokeWidth={1}
+            dot={false} legendType="none" isAnimationActive={false} />
 
           {/* Median */}
           <Line type="monotone" dataKey="median" stroke="#2563eb" strokeWidth={2.5}

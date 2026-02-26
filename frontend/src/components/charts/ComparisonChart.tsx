@@ -33,6 +33,7 @@ import { asyncEffect } from '../../lib/asyncEffect';
 // Period labels and previous-period calculation
 const PERIOD_MS: Record<string, number> = {
   '24h': 86_400_000,
+  '48h': 2  * 86_400_000,
   '7d':  7  * 86_400_000,
   '14d': 14 * 86_400_000,
   '30d': 30 * 86_400_000,
@@ -40,6 +41,7 @@ const PERIOD_MS: Record<string, number> = {
 
 const PERIOD_LABELS: Partial<Record<Period, { current: string; previous: string }>> = {
   '24h': { current: 'Hoje',         previous: 'Ontem' },
+  '48h': { current: 'Últimas 48h',  previous: '48h anteriores' },
   '7d':  { current: 'Últimos 7d',   previous: '7d anteriores' },
   '14d': { current: 'Últimos 14d',  previous: '14d anteriores' },
   '30d': { current: 'Últimos 30d',  previous: '30d anteriores' },
@@ -62,7 +64,7 @@ interface ComparisonPoint {
 }
 
 interface Props {
-  fixedPeriod?: '24h' | '7d' | '14d' | '30d'; // modo autônomo (página dedicada)
+  fixedPeriod?: '24h' | '48h' | '7d' | '14d' | '30d'; // modo autônomo (página dedicada)
   currentAnalytics?: GlucoseAnalytics | null;   // modo dashboard (passado pelo pai)
 }
 

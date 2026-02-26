@@ -20,12 +20,22 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { getAnalytics } from '../../lib/api';
 import type { DailyPattern, GlucoseStats, TimeInRange } from '../../lib/api';
-import { useDashboardStore, getPeriodDates, type Period } from '../../stores/dashboardStore';
+import { useDashboardStore, getPeriodDates, type Period, type AlarmThresholds } from '../../stores/dashboardStore';
 import { formatGlucose, unitLabel } from '../../lib/glucose';
 import { GlucoseReferenceLines } from './GlucoseReferenceLines';
+import { GLUCOSE_HEX } from '../../lib/glucoseColors';
+
+function avgZoneColor(val: number, t: AlarmThresholds): string {
+  if (val > t.veryHigh) return GLUCOSE_HEX.veryHigh;
+  if (val > t.high)     return GLUCOSE_HEX.high;
+  if (val >= t.low)     return GLUCOSE_HEX.inRange;
+  if (val >= t.veryLow) return GLUCOSE_HEX.low;
+  return GLUCOSE_HEX.veryLow;
+}
 
 // Periods that use the selected date range (richer AGP patterns)
-const LONG_PERIODS: Period[] = ['7d', '14d', '30d'];
+// 48h has enough data to yield meaningful hourly patterns (vs ≤24h which falls back to last 24h)
+const LONG_PERIODS: Period[] = ['48h', '7d', '14d', '30d'];
 
 interface ChartPoint {
   hour: string;       // "HH:00"
@@ -60,7 +70,7 @@ function CustomTooltip({ active, payload, unit }: CustomTooltipProps) {
       <div className="space-y-0.5">
         <p>
           <span className="text-muted-foreground">Mediana: </span>
-          <span className="font-bold text-green-600 dark:text-green-400">
+          <span className="font-bold" style={{ color: '#3b82f6' }}>
             {formatGlucose(d.avg, unit)} {ul}
           </span>
         </p>
@@ -84,6 +94,10 @@ function CustomTooltip({ active, payload, unit }: CustomTooltipProps) {
 export const DailyPatternChart = memo(function DailyPatternChart() {
   const { period, lastRefresh, alarmThresholds, unit } = useDashboardStore();
   const yTicks = [0, alarmThresholds.veryLow, alarmThresholds.low, alarmThresholds.high, alarmThresholds.veryHigh, 350];
+
+  // Chart margin left/right = 4px matches badge px-1 padding so the entire chart
+  // (Y-axis labels included) sits within the same horizontal bounds as the badges.
+  const yAxisWidth = unit === 'mmol' ? 38 : 35;
 
   const [patterns, setPatterns] = useState<DailyPattern[]>([]);
   const [stats, setStats]       = useState<GlucoseStats | null>(null);
@@ -199,9 +213,9 @@ export const DailyPatternChart = memo(function DailyPatternChart() {
             {/* Média */}
             <div className="text-center rounded-md bg-muted/50 py-1.5 px-1">
               <p className="text-[10px] text-muted-foreground leading-none mb-0.5">Média</p>
-              <p className="text-sm font-bold leading-none">
+              <p className="text-sm font-bold leading-none" style={{ color: avgZoneColor(stats.average, alarmThresholds) }}>
                 {formatGlucose(stats.average, unit)}
-                <span className="text-[10px] font-normal text-muted-foreground ml-0.5">{unitLabel(unit)}</span>
+                <span className="text-[10px] font-normal ml-0.5">{unitLabel(unit)}</span>
               </p>
             </div>
             {/* GMI */}
@@ -232,10 +246,12 @@ export const DailyPatternChart = memo(function DailyPatternChart() {
         )}
 
         {/* ── Chart ─────────────────────────────────────────────────── */}
-        <ResponsiveContainer width="100%" height={260}>
+        {/* margin left/right = 4px (same as badge px-1) so the entire chart  */}
+        {/* — including Y-axis labels — sits within the badge row bounds.     */}
+        <ResponsiveContainer width="100%" height={280}>
           <ComposedChart
             data={data}
-            margin={{ top: 10, right: 48, left: -10, bottom: 0 }}
+            margin={{ top: 10, right: 4, left: 4, bottom: 0 }}
           >
             <CartesianGrid
               strokeDasharray="3 3"
@@ -258,29 +274,34 @@ export const DailyPatternChart = memo(function DailyPatternChart() {
               domain={[0, 350]}
               tick={{ fontSize: 11, fill: 'currentColor' }}
               className="text-muted-foreground"
-              width={unit === 'mmol' ? 38 : 35}
+              width={yAxisWidth}
               tickFormatter={(v: number) => formatGlucose(v, unit)}
             />
 
             <Tooltip content={<CustomTooltip unit={unit} />} />
 
-            {/* Target range reference lines */}
-            <GlucoseReferenceLines thresholds={alarmThresholds} unit={unit} />
+            {/* Target range reference lines — labels hidden: yTicks already shows all thresholds */}
+            <GlucoseReferenceLines thresholds={alarmThresholds} unit={unit} showLabels={false} />
 
             {/* ── Stacked percentile bands (bottom → top) ────────────── */}
-            <Area type="monotone" dataKey="p5_base"    stackId="bands" stroke="none" fill="transparent"           isAnimationActive={false} legendType="none" />
-            <Area type="monotone" dataKey="outer_low"  stackId="bands" stroke="none" fill="rgba(34,197,94,0.15)"  isAnimationActive={false} legendType="none" />
-            <Area type="monotone" dataKey="inner"      stackId="bands" stroke="none" fill="rgba(34,197,94,0.35)"  isAnimationActive={false} legendType="none" />
-            <Area type="monotone" dataKey="outer_high" stackId="bands" stroke="none" fill="rgba(34,197,94,0.15)"  isAnimationActive={false} legendType="none" />
+            {/* Stacked percentile bands */}
+            <Area type="monotone" dataKey="p5_base"    stackId="bands" stroke="none"                              fill="transparent"          isAnimationActive={false} legendType="none" />
+            <Area type="monotone" dataKey="outer_low"  stackId="bands" stroke="none"                              fill="rgba(59,130,246,0.12)" isAnimationActive={false} legendType="none" />
+            <Area type="monotone" dataKey="inner"      stackId="bands" stroke="rgba(59,130,246,0.50)" strokeWidth={1} fill="rgba(59,130,246,0.30)" isAnimationActive={false} legendType="none" />
+            <Area type="monotone" dataKey="outer_high" stackId="bands" stroke="rgba(59,130,246,0.28)" strokeWidth={1} fill="rgba(59,130,246,0.12)" isAnimationActive={false} legendType="none" />
+
+            {/* Bottom borders — Lines at the lower edge of each band */}
+            <Line type="monotone" dataKey="p5"  stroke="rgba(59,130,246,0.28)" strokeWidth={1} dot={false} legendType="none" isAnimationActive={false} />
+            <Line type="monotone" dataKey="p25" stroke="rgba(59,130,246,0.50)" strokeWidth={1} dot={false} legendType="none" isAnimationActive={false} />
 
             {/* Median line */}
             <Line
               type="monotone"
               dataKey="avg"
-              stroke="#16a34a"
+              stroke="#3b82f6"
               strokeWidth={2.5}
               dot={false}
-              activeDot={{ r: 4, fill: '#16a34a' }}
+              activeDot={{ r: 4, fill: '#3b82f6' }}
               isAnimationActive={true}
               animationDuration={600}
               legendType="none"
@@ -291,15 +312,15 @@ export const DailyPatternChart = memo(function DailyPatternChart() {
         {/* Legend */}
         <div className="flex gap-4 mt-1 flex-wrap justify-end">
           <div className="flex items-center gap-1.5">
-            <div className="w-8 h-0.5 bg-green-700 dark:bg-green-500" />
+            <div className="w-8 h-0.5" style={{ background: '#3b82f6' }} />
             <span className="text-[10px] text-muted-foreground">Mediana (P50)</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-4 h-3 rounded-sm" style={{ background: 'rgba(34,197,94,0.35)' }} />
+            <div className="w-4 h-3 rounded-sm" style={{ background: 'rgba(59,130,246,0.30)', border: '1px solid rgba(59,130,246,0.50)' }} />
             <span className="text-[10px] text-muted-foreground">P25–P75</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-4 h-3 rounded-sm" style={{ background: 'rgba(34,197,94,0.15)' }} />
+            <div className="w-4 h-3 rounded-sm" style={{ background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.28)' }} />
             <span className="text-[10px] text-muted-foreground">P5–P95</span>
           </div>
         </div>
