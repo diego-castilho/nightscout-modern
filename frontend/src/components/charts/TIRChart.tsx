@@ -128,7 +128,10 @@ function rangeLabel(seg: RangeRow, ul: string): string {
 }
 
 export const TIRChart = memo(function TIRChart({ tir, loading }: Props) {
-  const { unit, alarmThresholds } = useDashboardStore();
+  const { unit, alarmThresholds, period } = useDashboardStore();
+  // Analytics always uses min 24h; periods ≤24h collapse to 24h, 48h keeps 48h.
+  const analyticsPeriod = ['1h', '3h', '6h', '12h', '24h'].includes(period) ? '24h' : period;
+  const analyticsLabel = `baseado nas últimas ${analyticsPeriod}`;
   const ul = unitLabel(unit);
   const RANGES = useMemo(() => buildRanges(alarmThresholds), [alarmThresholds]);
   if (loading) {
@@ -160,7 +163,10 @@ export const TIRChart = memo(function TIRChart({ tir, loading }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Tempo no Alvo (TIR)</CardTitle>
+        <CardTitle className="text-base flex items-baseline justify-between">
+          Tempo no Alvo (TIR)
+          <span className="text-xs font-normal text-muted-foreground">{analyticsLabel}</span>
+        </CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
 

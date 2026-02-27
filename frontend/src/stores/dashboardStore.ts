@@ -157,6 +157,14 @@ export const useDashboardStore = create<DashboardState>()(
     }),
     {
       name: 'nightscout-dashboard',
+      version: 1,
+      migrate: (persisted: unknown, version: number) => {
+        const s = persisted as Record<string, unknown>;
+        if (version < 1 && ['7d', '14d', '30d'].includes(s.period as string)) {
+          s.period = '24h';
+        }
+        return s;
+      },
       partialize: (state: DashboardState) => ({
         darkMode:        state.darkMode,
         period:          state.period,

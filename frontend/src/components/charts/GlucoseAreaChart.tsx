@@ -591,19 +591,27 @@ export const GlucoseAreaChart = memo(function GlucoseAreaChart({ entries, loadin
 
   const visibleEventTypes = [...new Set(visibleTreatments.map((t) => t.eventType))];
 
-  // Fixed period boundaries for the X axis.
-  // Using 'dataMin'/'dataMax' would show only the actual data range — e.g. if the
-  // sensor was inserted 6 h ago and 12h is selected, the chart would show only 6 h.
-  // Anchoring to getPeriodDates ensures the full selected window is always visible.
+  // X-axis domain anchored to actual data so the chart always fills the plot area
+  // with no visual gap at the Y-axis or at the right edge.
+  // - domainStart: first real reading (prevents left gap; falls back to period start
+  //   if data is empty, e.g. sensor just inserted).
+  // - domainEnd: last real reading, extended when predictions are visible so the
+  //   prediction cone always fits.
+  // Ticks are still generated from the period boundaries so labels fall on clean
+  // clock positions (e.g. :00, :30) rather than on the first/last reading time.
   const { startDate: _periodStart, endDate: _periodEnd } = getPeriodDates(period);
   const periodDomainStart = new Date(_periodStart).getTime();
-  // Extend the right edge to cover predictions if they go beyond "now"
-  const periodDomainEnd = showPredictions && chartData.length > 0
-    ? Math.max(new Date(_periodEnd).getTime(), chartData[chartData.length - 1].time)
-    : new Date(_periodEnd).getTime();
-  const baseDomain: [number, number] = [periodDomainStart, periodDomainEnd];
+  const periodDomainEnd   = new Date(_periodEnd).getTime();
 
-  // Tick config
+  const actualPoints = data.filter((d) => d.sgv != null);
+  const domainStart = actualPoints.length > 0 ? actualPoints[0].time                     : periodDomainStart;
+  const dataLastTime = actualPoints.length > 0 ? actualPoints[actualPoints.length - 1].time : periodDomainEnd;
+  const domainEnd = showPredictions && chartData.length > 0
+    ? Math.max(dataLastTime, chartData[chartData.length - 1].time)
+    : dataLastTime;
+  const baseDomain: [number, number] = [domainStart, domainEnd];
+
+  // Tick config — uses period boundaries so ticks are at clean intervals
   const { ticks: baseTicks, formatStr: baseFormatStr } = getTickConfig(
     period, periodDomainStart, periodDomainEnd
   );

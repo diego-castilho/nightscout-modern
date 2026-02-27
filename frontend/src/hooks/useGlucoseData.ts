@@ -39,10 +39,16 @@ export function useGlucoseData() {
       try {
         const { startDate, endDate } = getPeriodDates(period);
 
+        // Analytics (TIR, GMI, CV%) always covers at least 24h to be clinically meaningful.
+        // Short periods affect only the glucose chart; stats always reflect a full day.
+        const analyticsStart = ['1h', '3h', '6h', '12h'].includes(period)
+          ? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+          : startDate;
+
         const [entriesRes, latestRes, analyticsRes] = await Promise.all([
           getGlucoseRange(startDate, endDate),
           getLatestGlucose(),
-          getAnalytics(startDate, endDate, thresholds),
+          getAnalytics(analyticsStart, endDate, thresholds),
         ]);
 
         if (cancelled) return;

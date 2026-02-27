@@ -201,7 +201,9 @@ export const DailyPatternChart = memo(function DailyPatternChart() {
         <CardTitle className="text-base flex items-center justify-between">
           <span>Padrão Diário (AGP)</span>
           <span className="text-xs font-normal text-muted-foreground">
-            {isLongPeriod ? `baseado nos últimos ${period}` : 'últimas 24h'}
+            {isLongPeriod
+              ? (period.endsWith('h') ? `baseado nas últimas ${period}` : `baseado nos últimos ${period}`)
+              : 'baseado nas últimas 24h'}
           </span>
         </CardTitle>
       </CardHeader>
