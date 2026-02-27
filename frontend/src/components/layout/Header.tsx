@@ -118,7 +118,7 @@ export function Header({ lastUpdated }: HeaderProps) {
               </Button>
             )}
 
-            {/* Ciclo de tema: Padrão Claro → Padrão Escuro → Dracula Claro → Dracula Escuro */}
+            {/* Alternar tema: Modo Claro ↔ Modo Escuro */}
             <Button
               variant="ghost"
               size="icon"

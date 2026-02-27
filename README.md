@@ -56,7 +56,7 @@ O **Nightscout Modern** é uma interface alternativa ao Nightscout clássico com
 - **Autenticação JWT** com expiração configurável, rate limiting (5 tentativas/15 min), middleware em todas as rotas
 - **Configurações persistidas no servidor** (compartilhadas entre dispositivos): unidade, thresholds, DIA, ISF, ICR, taxa basal, absorção de carbos
 - Suporte a **mg/dL e mmol/L** com conversão automática em toda a interface
-- **4 temas**: Padrão Claro, Padrão Escuro, Dracula Claro, Dracula Escuro
+- **2 temas**: Modo Claro e Modo Escuro
 
 ---
 
@@ -76,7 +76,7 @@ O **Nightscout Modern** é uma interface alternativa ao Nightscout clássico com
 | Combo Bolus + preBolus | ✅ | ✅ |
 | Comparação de períodos | ❌ | ✅ |
 | Config multi-dispositivo | ❌ | ✅ (server-side) |
-| Temas dark / Dracula | Parcial | ✅ (4 temas) |
+| Tema claro / escuro | Parcial | ✅ |
 | Calendário Mensal (heatmap) | ✅ | ✅ |
 | Resumo Semanal (sparklines) | ✅ | ✅ |
 | Stats Horárias (box plots) | ✅ | ✅ |
@@ -98,7 +98,7 @@ O **Nightscout Modern** é uma interface alternativa ao Nightscout clássico com
 | 4 | Configurações | Settings completo, mg/dL ↔ mmol/L, thresholds, persistência server-side | ✅ |
 | 5 | UX Avançado | Zoom/pan, comparação de períodos sobrepostos, seletor multi-período | ✅ |
 | 6 | Careportal & Calculadora | IOB/COB biexponencial, AR2, Calculadora BWP, idades de dispositivos, Temp Basal | ✅ |
-| 7 | Fidelidade NS | Setas de tendência (12 dir.), delta bucket averaging, temas Dracula | ✅ |
+| 7 | Fidelidade NS | Setas de tendência (12 dir.), delta bucket averaging | ✅ |
 | 8 | Careportal Avançado | Combo Bolus, preBolus, proteína/gordura, BG Check, Exercise, Basal Insulin | ✅ |
 | 9 | Segurança | JWT, rate limiting, middleware de proteção em todas as rotas, tela de login | ✅ |
 | 10 | Relatórios Clínicos | Calendário · Semanal · Horárias · Distribuição · Log · Refeições · AGP · Spaghetti | ✅ |
